@@ -1,0 +1,13 @@
+# DAIC ARCHIVE - Round 2 edge server
+# Phase 1 dependencies only. Embeddings/FAISS (Phase 2) and the LLM
+# provider (Phase 3) are added when those phases start, so the Phase 1
+# install stays small and fast on a laptop.
+
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+pymupdf==1.25.1
+
+# tests
+pytest==8.3.4
+httpx==0.28.1
