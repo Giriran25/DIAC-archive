@@ -1,0 +1,53 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Local secrets
+.env
+
+# ---- DAIC ARCHIVE: added for Round 2 backend ----
+
+# Heritage corpus (1.3 GB of PDFs, JP2 scans, audio, video).
+# Source material is NOT version-controlled; it is referenced by
+# checksum in the ingestion manifest instead.
+Data/
+
+# Python
+backend/.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Generated archive artifacts — rebuildable from Data/ via the ingest
+# pipeline, so they stay out of git.
+backend/archive/*.db
+backend/archive/*.db-journal
+backend/archive/*.db-wal
+backend/archive/*.db-shm
+backend/archive/*.faiss
+backend/archive/manifest.json
+backend/archive/derived/
+
+# Scratch
+*.tmp
