@@ -80,4 +80,5 @@ class HealthResponse(BaseModel):
     database_present: bool
     stats: ArchiveStats
     capabilities: dict[str, bool]
+    retrieval: dict | None = None
     detail: str | None = None

@@ -9,17 +9,35 @@ Run:
 """
 
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from .api import health
+from .api import health, search
 from .core import config
 
 log = logging.getLogger("daic")
 
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """Load the embedding model, the reranker and the FAISS index once, at
+    startup. A cold transformer load costs tens of seconds; paying it on
+    the first visitor question would look like a hang on the kiosk."""
+    from ..retrieval import pipeline
+    try:
+        loaded = pipeline.warm()
+        log.info("warmed: %s", loaded)
+        health.set_runtime(loaded)
+    except Exception as exc:      # the archive must still serve without them
+        log.warning("warm-up failed, retrieval will be degraded: %s", exc)
+        health.set_runtime({"error": str(exc)})
+    yield
+
+
 app = FastAPI(
+    lifespan=lifespan,
     title="DAIC ARCHIVE - Edge Server",
     description=(
         "Dr. Ambedkar International Centre Digital Heritage Archive. "
@@ -60,6 +78,7 @@ async def limit_body_size(request: Request, call_next):
 
 
 app.include_router(health.router, prefix="/api", tags=["system"])
+app.include_router(search.router, prefix="/api", tags=["retrieval"])
 
 
 @app.get("/api", tags=["system"])
@@ -68,5 +87,5 @@ def root() -> dict:
         "archive": config.ARCHIVE_NAME,
         "service": "edge-server",
         "phase": health.PHASE,
-        "endpoints": ["/api/health", "/api/docs"],
+        "endpoints": ["/api/health", "/api/search", "/api/ask", "/api/docs"],
     }

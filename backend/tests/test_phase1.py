@@ -292,10 +292,13 @@ def test_health_endpoint_reports_capabilities():
         body = r.json()
         assert body["archive"] == "DAIC ARCHIVE"
         caps = body["capabilities"]
-        # Phase 1 must not claim capabilities it has not built.
+        # The lexical half is Phase 1's and must always be present.
         assert caps["lexical_search"] is True
-        assert caps["vector_search"] is False
+        # Nothing may claim a capability it has not built. Generation is
+        # Phase 3; this assertion is what stops the flag being flipped
+        # before the LLM provider actually exists.
         assert caps["generation"] is False
+        assert caps["citation_validation"] is False
 
 
 @needs_archive

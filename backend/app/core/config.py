@@ -50,3 +50,41 @@ CHUNK_OVERLAP_CHARS = int(os.getenv("DAIC_CHUNK_OVERLAP", "180"))
 CHUNK_MIN_CHARS = int(os.getenv("DAIC_CHUNK_MIN", "220"))
 
 ARCHIVE_NAME = "DAIC ARCHIVE"
+
+
+# ---------------------------------------------------------------------------
+# Phase 2 - retrieval
+# ---------------------------------------------------------------------------
+
+# Embedding model. bge-small-en-v1.5 is 33M parameters / 384 dims and was
+# chosen over BGE-M3 because this laptop has no CUDA GPU and limited free
+# RAM, and because non-English queries are translated to English by the
+# translation layer BEFORE retrieval - so the embedding model never sees
+# Devanagari. Swapping to intfloat/multilingual-e5-small is a one-line
+# change here: same 384 dimensions, so the FAISS index shape is unchanged.
+# Re-embedding the whole corpus takes minutes, so this is not a lock-in.
+EMBED_MODEL = os.getenv("DAIC_EMBED_MODEL", "BAAI/bge-small-en-v1.5")
+EMBED_BATCH = int(os.getenv("DAIC_EMBED_BATCH", "64"))
+
+# Cross-encoder reranker. Selected by a measured bake-off on this machine;
+# see backend/tests/bench_rerankers.py and the Phase 2 report.
+RERANK_ENABLED = os.getenv("DAIC_RERANK_ENABLED", "1") not in ("0", "false", "False")
+RERANK_MODEL = os.getenv("DAIC_RERANK_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2")
+RERANK_BATCH = int(os.getenv("DAIC_RERANK_BATCH", "16"))
+
+# Models are cached inside the archive directory rather than the user
+# profile, so the whole edge server can be copied to the demo laptop and
+# run with no internet. HF_HOME is pointed here at import time.
+MODEL_CACHE = Path(os.getenv("DAIC_MODEL_CACHE", ARCHIVE_DIR / "models"))
+os.environ.setdefault("HF_HOME", str(MODEL_CACHE))
+os.environ.setdefault("SENTENCE_TRANSFORMERS_HOME", str(MODEL_CACHE))
+
+FAISS_PATH = Path(os.getenv("DAIC_FAISS_PATH", ARCHIVE_DIR / "chunks.faiss"))
+
+# Retrieval shape (approved Phase 2 design):
+#   FAISS top-N  +  FTS5 top-N  ->  RRF  ->  top-K fused  ->  rerank  ->  top-E
+RETRIEVE_DENSE_K = int(os.getenv("DAIC_DENSE_K", "25"))
+RETRIEVE_LEXICAL_K = int(os.getenv("DAIC_LEXICAL_K", "25"))
+FUSION_K = int(os.getenv("DAIC_FUSION_K", "20"))     # candidates handed to the reranker
+EVIDENCE_K = int(os.getenv("DAIC_EVIDENCE_K", "4"))  # evidence passed to the gate
+RRF_K = int(os.getenv("DAIC_RRF_K", "60"))           # standard RRF damping constant

@@ -42,6 +42,12 @@ class Source:
 
 WRITINGS_HEAD = "DR. BABASAHEB AMBEDKAR : WRITINGS AND SPEECHES"
 
+# Phase markers above the real phases. `for_phase()` only ever selects
+# sources at or below the requested phase, so these are never ingested by
+# an ordinary build - they have to be asked for by id.
+HELD_BACK = 90   # withheld deliberately; see the note on the source
+DEFERRED = 99    # out of scope for Round 2
+
 SOURCES: list[Source] = [
     Source(
         id="ws-vol-01",
@@ -74,7 +80,13 @@ SOURCES: list[Source] = [
         volume="Vol. III",
         running_head=WRITINGS_HEAD,
         licence="Government of India publication - Dr. Ambedkar Foundation",
-        phase=2,
+        phase=HELD_BACK,
+        notes="HELD BACK ON PURPOSE for the live archivist ingestion demo "
+              "(PS req 14). Keeping a real, substantial document the system has "
+              "never seen makes upload -> review -> approve -> index -> query an "
+              "authentic run rather than a staged one. Do not add to the Phase 2 "
+              "corpus. Contents: Philosophy of Hinduism, The Triumph of "
+              "Brahmanism, Krishna and His Gita, Buddha or Karl Marx.",
     ),
     Source(
         id="ws-vol-04",
@@ -84,7 +96,11 @@ SOURCES: list[Source] = [
         volume="Vol. IV",
         running_head=WRITINGS_HEAD,
         licence="Government of India publication - Dr. Ambedkar Foundation",
-        phase=2,
+        phase=DEFERRED,
+        notes="Deferred past Round 2. Its running heads are bare numbers "
+              "('Riddle No. 15'), so a citation would read 'Vol. IV, Riddle No. "
+              "15, p. 220' and tell a reader nothing about the subject. Every "
+              "other volume yields a titled work.",
     ),
     Source(
         id="ws-vol-05",
