@@ -28,26 +28,29 @@ function pickVoice(voices, locale) {
   const sameLang = voices.find((v) => v.lang?.toLowerCase().startsWith(base));
   if (sameLang) return sameLang;
   // Nothing for this language on this device — fall back to any English voice
-  // rather than letting the engine pick something unintelligible.
   return voices.find((v) => v.lang?.toLowerCase().startsWith("en")) || voices[0];
 }
 
 /**
  * Reads an array of sentences aloud, reporting which one is being spoken so
- * the UI can highlight it. Speaking one sentence per utterance (rather than
- * one long utterance with boundary events) is what makes the highlight
- * reliable across browsers — Chrome and Safari disagree about charIndex.
+ * the UI can highlight it. Supports adjustable speed rate and pause/resume.
  */
 export function useReadAloud() {
   const [speakingId, setSpeakingId] = useState(null);
   const [sentenceIndex, setSentenceIndex] = useState(-1);
   const [paused, setPaused] = useState(false);
   const [voices, setVoices] = useState([]);
+  const [rate, setRate] = useState(1.0); // 0.8, 1.0, 1.2
 
   const queueRef = useRef([]);
   const cursorRef = useRef(0);
   const idRef = useRef(null);
   const localeRef = useRef("en-IN");
+  const rateRef = useRef(1.0);
+
+  useEffect(() => {
+    rateRef.current = rate;
+  }, [rate]);
 
   useEffect(() => {
     if (!speechSupported()) return;
@@ -68,8 +71,7 @@ export function useReadAloud() {
     setPaused(false);
   }, []);
 
-  // Anything still queued when the component unmounts would keep talking over
-  // the next view, so tear the queue down explicitly.
+  // Cleanup on unmount
   useEffect(() => stop, [stop]);
 
   const speakNext = useCallback(() => {
@@ -77,8 +79,6 @@ export function useReadAloud() {
     const i = cursorRef.current;
 
     if (i >= queue.length) {
-      // Clear the id too — otherwise pressing Listen again on the same item
-      // takes the toggle-off path and refuses to replay.
       idRef.current = null;
       setSpeakingId(null);
       setSentenceIndex(-1);
@@ -92,20 +92,17 @@ export function useReadAloud() {
     utter.lang = localeRef.current;
     const voice = pickVoice(voices, localeRef.current);
     if (voice) utter.voice = voice;
-    utter.rate = 0.95;
+    utter.rate = rateRef.current;
     utter.pitch = 1;
 
     utter.onend = () => {
       cursorRef.current += 1;
       speakNext();
     };
+
     utter.onerror = () => {
-      // "interrupted" fires on every deliberate cancel — treat it as a stop,
-      // not as a failure worth surfacing.
-      idRef.current = null;
-      setSpeakingId(null);
-      setSentenceIndex(-1);
-      setPaused(false);
+      cursorRef.current += 1;
+      speakNext();
     };
 
     window.speechSynthesis.speak(utter);
@@ -113,51 +110,50 @@ export function useReadAloud() {
 
   const speak = useCallback(
     (id, sentences, lang = "en") => {
-      if (!speechSupported()) return;
+      if (!speechSupported() || !sentences?.length) return;
 
-      // Tapping the same item again stops it — the expected toggle.
-      if (idRef.current === id) {
+      // If already playing this exact item, toggle stop
+      if (idRef.current === id && !paused) {
         stop();
         return;
       }
 
       window.speechSynthesis.cancel();
-      queueRef.current = sentences.filter((s) => s && s.trim());
-      cursorRef.current = 0;
+
       idRef.current = id;
-      localeRef.current = SPEECH_LOCALE[lang] || SPEECH_LOCALE.en;
+      queueRef.current = sentences;
+      cursorRef.current = 0;
+      localeRef.current = SPEECH_LOCALE[lang] || "en-IN";
+
       setSpeakingId(id);
+      setSentenceIndex(0);
       setPaused(false);
+
       speakNext();
     },
-    [speakNext, stop]
+    [paused, speakNext, stop]
   );
 
   const togglePause = useCallback(() => {
-    if (!speechSupported() || !idRef.current) return;
-    if (window.speechSynthesis.paused) {
+    if (!speechSupported() || !speakingId) return;
+    if (paused) {
       window.speechSynthesis.resume();
       setPaused(false);
     } else {
       window.speechSynthesis.pause();
       setPaused(true);
     }
-  }, []);
-
-  const voiceFor = useCallback(
-    (lang) => pickVoice(voices, SPEECH_LOCALE[lang] || SPEECH_LOCALE.en),
-    [voices]
-  );
+  }, [paused, speakingId]);
 
   return {
-    speak,
-    stop,
-    togglePause,
+    supported: speechSupported(),
     speakingId,
     sentenceIndex,
     paused,
-    voiceFor,
-    supported: speechSupported(),
-    voicesLoaded: voices.length > 0,
+    rate,
+    setRate,
+    speak,
+    stop,
+    togglePause,
   };
 }

@@ -54,6 +54,23 @@ window.SpeechSynthesisUtterance = FakeUtterance;
 window.scrollTo = () => {};
 Element.prototype.scrollIntoView = () => {};
 
+/* jsdom has no media pipeline, so play() throws "not implemented" and the
+   landing page's autoplay path would never be exercised. This stand-in
+   resolves by default; a test can make it reject to check the behaviour
+   when a browser refuses autoplay. */
+export const media = { rejectPlay: false };
+
+window.HTMLMediaElement.prototype.play = function play() {
+  if (media.rejectPlay) return Promise.reject(new DOMException("NotAllowedError"));
+  this.dispatchEvent(new Event("play"));
+  return Promise.resolve();
+};
+window.HTMLMediaElement.prototype.pause = function pause() {};
+
+/* Nothing about the entrance is persisted: App starts at the landing page
+   on every fresh mount, and the suites that test the application pass
+   `startAtLanding={false}` instead. */
+
 export function resetSpoken() {
   spoken.length = 0;
   synth.cancel();

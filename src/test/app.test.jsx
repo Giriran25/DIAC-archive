@@ -1,6 +1,6 @@
 import React, { StrictMode } from "react";
 import { describe, it, expect, beforeEach } from "vitest";
-import { render, screen, within, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import App from "../App.jsx";
@@ -9,11 +9,15 @@ import { answerQuestion, searchArticles, splitSentences } from "../lib/retrieval
 import { ARTICLES, PASSAGES } from "../data/corpus.js";
 
 /* Rendered in StrictMode deliberately — that is how main.jsx mounts it, and
-   it is what surfaced the duplicated seeded question. */
-function mount() {
+   it is what surfaced the duplicated seeded question.
+
+   `startAtLanding={false}` mounts past the entrance: these suites test the
+   application, and the landing page has its own.
+   `initialAuth={true}` by default allows suite tests to access all views. */
+function mount(props = {}) {
   return render(
     <StrictMode>
-      <App />
+      <App startAtLanding={false} initialAuth={true} {...props} />
     </StrictMode>
   );
 }
@@ -97,7 +101,7 @@ describe("ask — grounding behaviour", () => {
 });
 
 describe("archive → article → evidence", () => {
-  it("opens an article and renders its evidence beneath it", async () => {
+  it("opens a document and shows the passages on the page being read", async () => {
     const user = userEvent.setup();
     mount();
 
@@ -105,22 +109,35 @@ describe("archive → article → evidence", () => {
     await user.click(await screen.findByRole("button", { name: /Annihilation of Caste/i }));
 
     expect(await screen.findByRole("heading", { name: "Annihilation of Caste" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /Evidence/i })).toBeInTheDocument();
+
+    // A passage belongs to a page, so the evidence shown is the evidence on
+    // the page open in the reader — not every passage in the document.
+    expect(await screen.findByRole("heading", { name: /Evidence/i })).toBeInTheDocument();
 
     const article = ARTICLES.find((a) => a.id === "annihilation-of-caste");
-    for (const ev of article.evidence) {
-      expect(screen.getByText(ev.quote)).toBeInTheDocument();
-      expect(screen.getByText(ev.citation)).toBeInTheDocument();
+    const shown = screen.getAllByText(/Writings & Speeches|Vol\./i);
+    expect(shown.length).toBeGreaterThan(0);
+    expect(shown.length).toBeLessThanOrEqual(article.evidence.length);
+
+    // A confidence is rendered only where one was actually reported.
+    for (const badge of screen.queryAllByText(/% OCR$/)) {
+      expect(badge.textContent).not.toBe("0% OCR");
+      expect(badge.textContent).not.toMatch(/NaN/);
     }
-    expect(screen.getAllByText(/% OCR/).length).toBe(article.evidence.length);
   });
 
-  it("navigates to a related article", async () => {
+  it("moves between documents through the archive list", async () => {
     const user = userEvent.setup();
     mount();
 
+    // The archive records no "related documents" relation and exposes no
+    // endpoint for one, so the route between documents is the catalogue
+    // itself rather than an invented set of suggestions.
     await user.click(screen.getAllByRole("button", { name: /^Archive$/ })[0]);
     await user.click(await screen.findByRole("button", { name: /Annihilation of Caste/i }));
+    expect(await screen.findByRole("heading", { name: /Annihilation of Caste/i })).toBeInTheDocument();
+
+    await user.click(await screen.findByRole("button", { name: /Back to/i }));
     await user.click(await screen.findByRole("button", { name: /Mahad Satyagraha/i }));
 
     expect(await screen.findByRole("heading", { name: "Mahad Satyagraha" })).toBeInTheDocument();
@@ -199,7 +216,11 @@ describe("timeline and archivist", () => {
 
     await user.click(screen.getAllByRole("button", { name: /^Timeline$/ })[0]);
     await user.click(await screen.findByRole("button", { name: /1948/ }));
-    await user.click(await screen.findByRole("button", { name: /Read the article and its evidence/i }));
+
+    // An event opens through one of its archival sources, not a generic CTA:
+    // the route into a document is always a passage that cites it.
+    const sources = await screen.findAllByRole("button", { name: /Article 17/i });
+    await user.click(sources[0]);
 
     expect(await screen.findByRole("heading", { name: /Article 17/i })).toBeInTheDocument();
   });
@@ -211,10 +232,31 @@ describe("timeline and archivist", () => {
     await user.click(screen.getByRole("button", { name: /Visitor mode/i }));
     await user.click(await screen.findByRole("button", { name: /OCR queue/i }));
 
-    const rows = await screen.findAllByText(/%$/);
+    // Rows are manuscript pages awaiting human review, not scores: a page
+    // with no reported confidence still belongs in the queue.
+    const rows = await screen.findAllByRole("button", { name: /page \d+/i });
     expect(rows.length).toBeGreaterThan(0);
     await user.click(rows[0]);
-    expect(await screen.findByText(/Transcribed text/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Candidate text/i)).toBeInTheDocument();
+  });
+
+  it("protects archivist portal when unauthenticated and requires login", async () => {
+    const user = userEvent.setup();
+    render(
+      <StrictMode>
+        <App startAtLanding={false} initialAuth={false} />
+      </StrictMode>
+    );
+
+    await user.click(screen.getByRole("button", { name: /Visitor mode/i }));
+    expect(await screen.findByText(/Institutional Archive Access/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Sign in/i })).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText(/Username/i), "archivist_test");
+    await user.type(screen.getByLabelText(/Password/i), "secret123");
+    await user.click(screen.getByRole("button", { name: /Sign in/i }));
+
+    expect(await screen.findByText(/The other half of the platform/i)).toBeInTheDocument();
   });
 });
 

@@ -1,3 +1,221 @@
+/* ---------------------------------------------------------------------- *
+ * DAIC ARCHIVE — Design System
+ *
+ * Lightweight CSS utilities and micro-interactions that sit on top of the
+ * existing Tailwind layer. Nothing here changes the approved visual
+ * language — it formalises what was already inline.
+ * ---------------------------------------------------------------------- */
+
+/* ---- Google Fonts (loaded once, globally at top of file) ---- */
+/* Fonts are served from this origin, not a CDN. The archive runs on a
+   laptop that a tablet reaches over the LAN, frequently with no route to
+   the internet at all — a remote stylesheet meant the kiosk fell back to
+   system faces exactly where it is meant to be used. */
+@import url('/fonts/fonts.css');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ---- Base ---- */
+* { box-sizing: border-box; }
+::selection { background: #d9ac4f; }
+
+html {
+  scroll-behavior: smooth;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  margin: 0;
+  font-family: 'Work Sans', sans-serif;
+  color: #241f16;
+  background-color: #f4ead0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ---- Skip link ---- */
+.daic-skip-link {
+  position: absolute;
+  top: -100%;
+  left: 16px;
+  z-index: 100;
+  padding: 8px 16px;
+  background: #1c2c4d;
+  color: #f4ead0;
+  font-family: 'Work Sans', sans-serif;
+  font-size: 13px;
+  border-radius: 0 0 8px 8px;
+  text-decoration: none;
+  transition: top 150ms ease;
+}
+.daic-skip-link:focus {
+  top: 0;
+}
+
+/* ---- Focus rings (gold, accessible) ---- */
+:focus-visible {
+  outline: 2px solid #b3862c;
+  outline-offset: 2px;
+}
+
+/* ---- Details/summary reset ---- */
+details > summary { list-style: none; cursor: pointer; }
+details > summary::-webkit-details-marker { display: none; }
+
+/* ---------------------------------------------------------------------- *
+ * MICRO-INTERACTIONS
+ * Duration: 150–250ms. No heavy animation frameworks.
+ * ---------------------------------------------------------------------- */
+
+/* Card — parchment cards throughout the app */
+.daic-card {
+  transition: transform 200ms ease, box-shadow 200ms ease, border-color 200ms ease;
+}
+.daic-card:hover {
+  transform: translateY(-3px) scale(1.01);
+  box-shadow: 0 6px 16px -6px rgba(20, 28, 48, 0.1);
+}
+.daic-card:active {
+  transform: translateY(-1px) scale(1.005);
+}
+
+/* Button — primary / secondary buttons */
+.daic-btn {
+  transition: transform 180ms ease, opacity 180ms ease, box-shadow 180ms ease;
+}
+.daic-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px -4px rgba(20, 28, 48, 0.15);
+}
+.daic-btn:active {
+  transform: translateY(0);
+}
+
+/* Chip — filter chips, tag chips */
+.daic-chip {
+  transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease, transform 180ms ease;
+}
+.daic-chip:hover {
+  transform: translateY(-1px);
+}
+.daic-chip:active {
+  transform: translateY(0);
+}
+
+/* Arrow — chevron links, "read more" arrows */
+.daic-arrow {
+  transition: transform 180ms ease;
+  display: inline-flex;
+}
+.daic-arrow-parent:hover .daic-arrow {
+  transform: translateX(4px);
+}
+
+/* Suggested question — gentle lift */
+.daic-suggestion {
+  transition: transform 200ms ease, box-shadow 200ms ease, border-color 200ms ease;
+}
+.daic-suggestion:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px -4px rgba(20, 28, 48, 0.1);
+  border-color: #b3862c;
+}
+.daic-suggestion:active {
+  transform: translateY(0);
+}
+
+/* Timeline active dot */
+.daic-dot {
+  transition: transform 200ms ease, box-shadow 200ms ease, background-color 200ms ease, border-color 200ms ease;
+}
+.daic-dot-active {
+  transform: scale(1.3);
+  box-shadow: 0 0 0 4px rgba(179, 134, 44, 0.2);
+}
+
+/* Section reveal — used on page sections as they come into view */
+.daic-reveal {
+  animation: daicReveal 400ms ease-out both;
+}
+@keyframes daicReveal {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Staggered children */
+.daic-reveal-1 { animation-delay: 50ms; }
+.daic-reveal-2 { animation-delay: 100ms; }
+.daic-reveal-3 { animation-delay: 150ms; }
+.daic-reveal-4 { animation-delay: 200ms; }
+.daic-reveal-5 { animation-delay: 250ms; }
+.daic-reveal-6 { animation-delay: 300ms; }
+
+/* Loading step fade-in */
+.daic-load-step {
+  opacity: 0;
+  animation: daicLoadStep 350ms ease-out forwards;
+}
+@keyframes daicLoadStep {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ChakraMark spin */
+@keyframes daicSpin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+.daic-spin {
+  animation: daicSpin 2.4s linear infinite;
+}
+
+/* ---- Touch / active states ---- */
+.daic-touch:active {
+  opacity: 0.85;
+  transform: scale(0.98);
+}
+
+/* ---- Responsive ---- */
+
+/* Ensure minimum touch targets on mobile */
+@media (pointer: coarse) {
+  button, [role="button"], a {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* ---- Reduced motion ---- */
+@media (prefers-reduced-motion: reduce) {
+  .daic-card:hover,
+  .daic-btn:hover,
+  .daic-chip:hover,
+  .daic-suggestion:hover {
+    transform: none;
+    box-shadow: none;
+  }
+  .daic-arrow-parent:hover .daic-arrow {
+    transform: none;
+  }
+  .daic-dot-active {
+    transform: scale(1.3);
+    box-shadow: none;
+  }
+  .daic-reveal,
+  .daic-load-step {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+  .daic-spin {
+    animation: none;
+  }
+  .daic-touch:active {
+    transform: none;
+  }
+  html {
+    scroll-behavior: auto;
+  }
+}

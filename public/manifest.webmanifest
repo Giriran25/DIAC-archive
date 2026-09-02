@@ -1,0 +1,20 @@
+{
+  "name": "DAIC ARCHIVE — Dr. Ambedkar International Centre",
+  "short_name": "DAIC ARCHIVE",
+  "description": "Digital heritage archive of Dr. B. R. Ambedkar's writings, speeches and constitutional debates. Every answer is traceable to a page.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f4ead0",
+  "theme_color": "#141c30",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": ["education", "books", "reference"],
+  "icons": [
+    { "src": "/icon-192.svg", "sizes": "192x192", "type": "image/svg+xml" },
+    { "src": "/icon-512.svg", "sizes": "512x512", "type": "image/svg+xml" },
+    { "src": "/icon-maskable.svg", "sizes": "512x512", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}
