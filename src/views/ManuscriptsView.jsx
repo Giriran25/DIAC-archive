@@ -82,7 +82,7 @@ export default function ManuscriptsView({ t }) {
                   key={ms.id}
                   onClick={() => setSelectedId(ms.id)}
                   aria-pressed={isSelected}
-                  className={`daic-card text-left p-5 rounded-xl border transition-all duration-200 flex flex-col justify-between ${
+                  className={`daic-card min-w-0 w-full text-left p-5 rounded-xl border transition-all duration-200 flex flex-col justify-between ${
                     isSelected
                       ? "bg-[#1c2c4d] text-[#f4ead0] border-[#b3862c] shadow-md ring-2 ring-[#b3862c]/50"
                       : "bg-[#faf4e4] border-[#d8c79a] text-[#5a4420] hover:border-[#b3862c]"
@@ -125,7 +125,7 @@ export default function ManuscriptsView({ t }) {
             })}
           </div>
 
-          {active && <ManuscriptViewer manuscript={active} t={t} />}
+          {active && <ManuscriptViewer key={active.id} manuscript={active} t={t} />}
         </>
       </AsyncState>
     </main>

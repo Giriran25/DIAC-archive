@@ -37,10 +37,12 @@ export default function UploadWorkflow({ t, setSub }) {
   const [currentStep, setCurrentStep] = useState(0);
   const [processing, setProcessing] = useState(false);
   const [uploadedSubmission, setUploadedSubmission] = useState(null);
+  const [uploadError, setUploadError] = useState(null);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setProcessing(true);
+    setUploadError(null);
     setCurrentStep(1); // Extraction
 
     setTimeout(async () => {
@@ -48,9 +50,14 @@ export default function UploadWorkflow({ t, setSub }) {
       try {
         const res = await api.upload(formData);
         setCurrentStep(3); // Pending Review
-        setUploadedSubmission(res.submission);
+        setUploadedSubmission(res.item || res.submission || null);
+        if (!res.item && !res.submission) {
+          setUploadError("The archive did not return a staged submission.");
+          setCurrentStep(0);
+        }
       } catch (err) {
-        console.error("Upload error:", err);
+        setUploadError(err?.userMessage || "The document could not be staged for review.");
+        setCurrentStep(0);
       } finally {
         setProcessing(false);
       }
@@ -134,6 +141,15 @@ export default function UploadWorkflow({ t, setSub }) {
           onSubmit={handleSubmit}
           className="p-6 md:p-8 rounded-2xl border border-[#d8c79a] bg-[#faf4e4] space-y-5"
         >
+          {uploadError && (
+            <div
+              role="alert"
+              className="p-3 rounded-lg border border-[#9c3d2e] bg-[#fbeae8] text-[#9c3d2e] text-xs"
+              style={{ fontFamily: FONT_UI }}
+            >
+              {uploadError}
+            </div>
+          )}
           <h4 className="text-base font-bold text-[#141c30]" style={{ fontFamily: FONT_DISPLAY }}>
             Ingest New Archival Document Package
           </h4>

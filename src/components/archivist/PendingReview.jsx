@@ -106,8 +106,10 @@ export default function PendingReview({ t }) {
 
       <div className="space-y-4">
         {items.map((item) => {
-          /* Backend status vocabulary: pending | indexed | rejected | failed. */
-          const isPending = item.status === "pending";
+           /* Keep compatibility with the mock's older label while accepting
+             the backend's explicit pending_review status. */
+           const isPending = item.status === "pending" || item.status === "pending_review";
+           const statusLabel = item.status === "pending_review" ? "Pending review" : item.status;
           return (
             <div
               key={item.id}
@@ -134,7 +136,7 @@ export default function PendingReview({ t }) {
                         ? "bg-[#9c3d2e] text-white"
                         : "bg-[#b3862c] text-white"
                     }`}>
-                      {item.status}
+                      {statusLabel}
                     </span>
                   </div>
                   <h3 className="text-lg font-bold text-[#141c30]" style={{ fontFamily: FONT_DISPLAY }}>
@@ -251,7 +253,7 @@ export default function PendingReview({ t }) {
             </div>
 
             {/* Actions in Modal */}
-            {selectedItem.status === "pending" && (
+            {(selectedItem.status === "pending" || selectedItem.status === "pending_review") && (
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#d8c79a]">
                 <button
                   onClick={() => {

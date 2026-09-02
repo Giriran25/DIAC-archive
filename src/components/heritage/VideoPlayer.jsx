@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Film, AlertOctagon, ShieldAlert } from "lucide-react";
 import {
   FONT_DISPLAY, FONT_BODY, FONT_UI,
@@ -11,6 +11,7 @@ import {
 
 export default function VideoPlayer({ mediaItem, t }) {
   const [activeSegment, setActiveSegment] = useState(0);
+  const videoRef = useRef(null);
 
   if (!mediaItem) return null;
 
@@ -41,6 +42,7 @@ export default function VideoPlayer({ mediaItem, t }) {
         {mediaItem.servable && mediaItem.streamUrl ? (
           <div className="w-full max-w-2xl rounded-lg overflow-hidden border border-[#d8c79a]/30 shadow-lg">
             <video
+              ref={videoRef}
               controls
               className="w-full max-h-[380px] bg-black object-cover"
               poster="/hero.png"
@@ -84,10 +86,17 @@ export default function VideoPlayer({ mediaItem, t }) {
             </h4>
             <div className="grid sm:grid-cols-2 gap-2">
               {mediaItem.segments.map((seg, idx) => (
-                <div
+                <button
                   key={idx}
-                  onClick={() => setActiveSegment(idx)}
-                  className={`p-2.5 rounded border text-xs cursor-pointer transition-colors ${
+                  type="button"
+                  onClick={() => {
+                    setActiveSegment(idx);
+                    if (videoRef.current && seg.startMs != null) {
+                      videoRef.current.currentTime = seg.startMs / 1000;
+                    }
+                  }}
+                  aria-pressed={activeSegment === idx}
+                  className={`p-2.5 rounded border text-xs cursor-pointer transition-colors text-left ${
                     activeSegment === idx
                       ? "bg-[#efe0bb] border-[#b3862c] text-[#141c30]"
                       : "bg-[#faf7ee] border-[#e6d9b3] text-[#5a4420]"
@@ -97,7 +106,7 @@ export default function VideoPlayer({ mediaItem, t }) {
                     {seg.start}
                   </span>
                   <p style={{ fontFamily: FONT_BODY }}>{seg.text}</p>
-                </div>
+                </button>
               ))}
             </div>
           </div>

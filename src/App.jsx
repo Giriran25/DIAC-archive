@@ -119,8 +119,8 @@ function AppShell({ startAtLanding = true }) {
       <DemoNotice />
 
       {/* ---- Header ---- */}
-      <header className="sticky top-0 z-20 shadow-sm" style={{ backgroundColor: INK }}>
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-2.5 flex items-center justify-between gap-4">
+      <header className="sticky top-0 z-20 overflow-x-hidden shadow-sm" style={{ backgroundColor: INK }}>
+        <div className="max-w-7xl mx-auto min-h-14 px-4 sm:px-6 py-2 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3">
           <button onClick={() => go("home")} className="flex items-center gap-2.5 shrink-0 text-left">
             <ChakraMark size={20} />
             <div>
@@ -131,12 +131,12 @@ function AppShell({ startAtLanding = true }) {
 
           {/* Desktop primary nav */}
           {mode === "visitor" && (
-            <nav className="hidden lg:flex items-center gap-1" aria-label="Main navigation">
+            <nav className="hidden xl:flex min-w-0 flex-1 items-center justify-center gap-0 overflow-x-auto daic-scrollbar-none" aria-label="Main navigation">
               {primaryTabs.map((x) => (
                 <button
                   key={x.id}
                   onClick={() => go(x.id)}
-                  className="daic-chip flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full transition-colors"
+                  className="daic-chip shrink-0 flex items-center gap-1 text-[11px] px-1.5 py-1.5 rounded-full transition-colors"
                   style={{
                     fontFamily: FONT_UI,
                     color: tab === x.id && !article ? INK : CREAM,
@@ -148,13 +148,13 @@ function AppShell({ startAtLanding = true }) {
                 </button>
               ))}
 
-              <span className="text-white/20 px-1">|</span>
+              <span className="text-white/20 px-0.5">|</span>
 
               {heritageTabs.map((x) => (
                 <button
                   key={x.id}
                   onClick={() => go(x.id)}
-                  className="daic-chip flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-full transition-colors"
+                  className="daic-chip shrink-0 flex items-center gap-1 text-[11px] px-1.5 py-1.5 rounded-full transition-colors"
                   style={{
                     fontFamily: FONT_UI,
                     color: tab === x.id && !article ? INK : "#d9ac4f",
@@ -169,7 +169,7 @@ function AppShell({ startAtLanding = true }) {
           )}
 
           {/* Right Controls */}
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          <div className="w-max justify-self-end flex items-center gap-2 sm:gap-3 shrink-0">
             {/* Language selector (desktop) */}
             <div className="hidden sm:flex items-center gap-0.5 rounded-full p-0.5" style={{ backgroundColor: INDIGO }}>
               {Object.entries(LANGS).map(([code, label]) => (
@@ -192,10 +192,11 @@ function AppShell({ startAtLanding = true }) {
             {/* Archivist mode toggle */}
             <button
               onClick={handleArchivistToggle}
+              aria-label={mode === "visitor" ? "Open archivist mode" : "Return to visitor mode"}
               className="daic-chip text-[11px] px-3 py-1.5 rounded-full border flex items-center gap-1.5"
               style={{ fontFamily: FONT_UI, color: CREAM, borderColor: "rgba(244,234,208,0.3)" }}
             >
-              <ShieldCheck size={12} />
+              <ShieldCheck size={14} />
               <span className="hidden sm:inline">{mode === "visitor" ? "Visitor mode" : "Archivist mode"}</span>
             </button>
           </div>
@@ -203,12 +204,12 @@ function AppShell({ startAtLanding = true }) {
 
         {/* Mobile/Tablet navigation bar */}
         {mode === "visitor" && (
-          <div className="lg:hidden flex justify-center gap-1 pb-2 px-3 overflow-x-auto">
+          <nav className="xl:hidden w-full min-w-0 flex justify-start gap-1 pb-2 px-3 overflow-x-auto daic-scrollbar-none" aria-label="Main navigation">
             {[...primaryTabs, ...heritageTabs].map((x) => (
               <button
                 key={x.id}
                 onClick={() => go(x.id)}
-                className="daic-chip flex items-center gap-1 text-[10px] px-2 py-1 rounded-full whitespace-nowrap"
+                className="daic-chip shrink-0 flex items-center gap-1.5 text-[10px] px-2 py-1 rounded-full whitespace-nowrap"
                 style={{
                   fontFamily: FONT_UI,
                   color: tab === x.id && !article ? INK : CREAM,
@@ -219,11 +220,11 @@ function AppShell({ startAtLanding = true }) {
                 {x.icon}{x.label}
               </button>
             ))}
-          </div>
+          </nav>
         )}
 
         {/* Mobile language bar */}
-        <div className="sm:hidden flex justify-center gap-1 pb-2">
+        <div className="sm:hidden min-h-8 flex items-center justify-center gap-1 pb-1.5">
           {Object.entries(LANGS).map(([code, label]) => (
             <button
               key={code}

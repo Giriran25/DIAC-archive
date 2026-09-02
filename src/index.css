@@ -28,6 +28,7 @@ html {
 
 body {
   margin: 0;
+  overflow-x: hidden;
   font-family: 'Work Sans', sans-serif;
   color: #241f16;
   background-color: #f4ead0;
@@ -59,6 +60,14 @@ body {
   outline: 2px solid #b3862c;
   outline-offset: 2px;
 }
+
+/* Navigation remains touch-scrollable on compact screens without exposing a
+   second scrollbar that competes with the archive content. */
+.daic-scrollbar-none {
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.daic-scrollbar-none::-webkit-scrollbar { display: none; }
 
 /* ---- Details/summary reset ---- */
 details > summary { list-style: none; cursor: pointer; }

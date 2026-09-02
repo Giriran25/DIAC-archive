@@ -27,7 +27,8 @@ export default function ArchivistOverview({ setSub }) {
     ]).then(([h, p]) => {
       if (!mounted) return;
       if (h) setHealth(h);
-      if (p?.pendingCount != null) setPendingCount(p.pendingCount);
+      const pending = p?.pendingCount ?? p?.byStatus?.pending_review ?? p?.byStatus?.pending;
+      if (pending != null) setPendingCount(pending);
       setLoading(false);
     });
     return () => { mounted = false; };

@@ -195,9 +195,11 @@ export default function AudioPlayer({ mediaItem, t }) {
             {mediaItem.segments.map((seg, idx) => {
               const isActive = activeSegmentIndex === idx;
               return (
-                <div
+                <button
                   key={idx}
+                  type="button"
                   onClick={() => seekTo(seg.startMs / 1000)}
+                  aria-pressed={isActive}
                   className={`p-3.5 rounded-lg border cursor-pointer transition-all duration-200 ${
                     isActive
                       ? "bg-[#efe0bb] border-[#b3862c] shadow-sm transform translate-x-1"
@@ -205,7 +207,7 @@ export default function AudioPlayer({ mediaItem, t }) {
                   }`}
                 >
                   <div className="flex items-center gap-2 mb-1.5">
-                    <button
+                    <span
                       className={`text-[10px] font-mono px-2 py-0.5 rounded font-semibold ${
                         isActive
                           ? "bg-[#1c2c4d] text-[#f4ead0]"
@@ -213,7 +215,7 @@ export default function AudioPlayer({ mediaItem, t }) {
                       }`}
                     >
                       {seg.start}
-                    </button>
+                    </span>
                     {isActive && (
                       <span className="text-[10px] uppercase font-bold tracking-widest text-[#9c3d2e] animate-pulse">
                         ● Playing
@@ -230,7 +232,7 @@ export default function AudioPlayer({ mediaItem, t }) {
                   >
                     {seg.text}
                   </p>
-                </div>
+                </button>
               );
             })}
           </div>
