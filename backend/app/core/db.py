@@ -44,14 +44,79 @@ def connect(path: Path | None = None, *, readonly: bool = False) -> Iterator[sql
         conn.close()
 
 
+# Columns added to tables that already existed in an earlier schema.
+# CREATE TABLE IF NOT EXISTS cannot add these, and ALTER TABLE ADD COLUMN is
+# not idempotent, so they are applied only when absent.
+_ADDED_COLUMNS: dict[str, list[tuple[str, str]]] = {
+    "timeline_events": [
+        ("location", "TEXT"),
+        ("category", "TEXT"),
+        ("date_text", "TEXT"),
+        ("summary", "TEXT"),
+    ],
+}
+
+
+ENTITY_KINDS = "'person','work','event','place','theme','document','speech'"
+
+
+def _widen_entity_kinds(conn: sqlite3.Connection) -> bool:
+    """Widen entities.kind to the full entity vocabulary.
+
+    SQLite cannot ALTER a CHECK constraint, so the table is rebuilt. An
+    over-narrow CHECK is silently destructive here: INSERT OR IGNORE
+    swallows the violation, so a 'place' row simply never appeared.
+    """
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='entities'").fetchone()
+    if not row or "'place'" in (row["sql"] or ""):
+        return False
+
+    conn.executescript(f"""
+        PRAGMA foreign_keys = OFF;
+        CREATE TABLE entities_new (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            kind        TEXT NOT NULL CHECK (kind IN ({ENTITY_KINDS})),
+            name        TEXT NOT NULL,
+            description TEXT,
+            UNIQUE (kind, name)
+        );
+        INSERT INTO entities_new (id, kind, name, description)
+            SELECT id, kind, name, description FROM entities;
+        DROP TABLE entities;
+        ALTER TABLE entities_new RENAME TO entities;
+        PRAGMA foreign_keys = ON;
+    """)
+    return True
+
+
+def _apply_column_migrations(conn: sqlite3.Connection) -> list[str]:
+    applied = []
+    for table, columns in _ADDED_COLUMNS.items():
+        row = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,)
+        ).fetchone()
+        if not row:
+            continue
+        existing = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
+        for name, decl in columns:
+            if name not in existing:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
+                applied.append(f"{table}.{name}")
+    return applied
+
+
 def init_db(path: Path | None = None) -> Path:
-    """Create the schema if absent. Safe to run repeatedly."""
+    """Create the schema if absent, and upgrade an existing archive in
+    place. Safe to run repeatedly; never drops or rewrites data."""
     db_path = Path(path or config.DB_PATH)
     db_path.parent.mkdir(parents=True, exist_ok=True)
     schema = config.SCHEMA_PATH.read_text(encoding="utf-8")
 
     with connect(db_path) as conn:
         conn.executescript(schema)
+        _apply_column_migrations(conn)
+        _widen_entity_kinds(conn)
         conn.commit()
     return db_path
 

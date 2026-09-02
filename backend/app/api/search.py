@@ -28,11 +28,16 @@ class AskRequest(BaseModel):
 class AskResponse(BaseModel):
     question: str
     answer: str
-    fallback: bool
+    grounded: bool          # produced by a model AND its citations validated
+    fallback: bool          # extractive text was used instead of generation
+    provider: str           # short name only - never a path or a secret
     evidence: list[dict]
     gate: dict
+    citations: dict
     timings: dict
+    generation: dict
     counts: dict
+    degraded: str | None = None
 
 
 class SearchResponse(AskResponse):
@@ -40,7 +45,7 @@ class SearchResponse(AskResponse):
 
 
 def _run(question: str, *, apply_gate: bool, include_candidates: bool,
-         evidence_k: int | None = None):
+         evidence_k: int | None = None, generate: bool = False):
     q = (question or "").strip()
     if not q:
         raise HTTPException(status_code=400, detail="Ask a question first.")
@@ -56,6 +61,8 @@ def _run(question: str, *, apply_gate: bool, include_candidates: bool,
     # Read-only handle: a visitor request physically cannot write to the
     # archive, enforced by the driver rather than by convention.
     with db.connect(readonly=True) as conn:
+        if generate:
+            return pipeline.answer(conn, q, evidence_k=evidence_k)
         return pipeline.search(
             conn, q,
             evidence_k=evidence_k,
@@ -74,27 +81,35 @@ def search(
     candidate list with per-retriever ranks, the reranked evidence, the
     gate decision with its thresholds, and per-stage timings."""
     result = _run(q, apply_gate=gate, include_candidates=True, evidence_k=k)
-    return SearchResponse(
-        question=result.question,
-        answer=result.answer,
-        fallback=result.fallback,
-        evidence=result.evidence,
-        gate=result.decision.as_dict() if result.decision else {},
-        timings=result.timings.as_dict(),
-        counts=result.counts,
-        candidates=result.candidates,
-    )
+    return SearchResponse(**_payload(result), candidates=result.candidates)
+
+
+def _payload(result) -> dict:
+    """Shared response shape. Deliberately exposes the provider NAME only -
+    never a model path, host or filesystem detail."""
+    return {
+        "question": result.question,
+        "answer": result.answer,
+        "grounded": result.grounded,
+        "fallback": result.fallback,
+        "provider": result.provider,
+        "evidence": result.evidence,
+        "gate": result.decision.as_dict() if result.decision else {},
+        "citations": result.citations,
+        "timings": result.timings.as_dict(),
+        "generation": result.generation,
+        "counts": result.counts,
+        "degraded": result.degraded,
+    }
 
 
 @router.post("/ask", response_model=AskResponse, summary="Ask the archive")
 def ask(body: AskRequest) -> AskResponse:
-    result = _run(body.question, apply_gate=True, include_candidates=False)
-    return AskResponse(
-        question=result.question,
-        answer=result.answer,
-        fallback=result.fallback,
-        evidence=result.evidence,
-        gate=result.decision.as_dict() if result.decision else {},
-        timings=result.timings.as_dict(),
-        counts=result.counts,
-    )
+    """Retrieve, gate, and only then generate.
+
+    A gate refusal returns before any model is contacted. A generated
+    answer whose citations do not validate is discarded in favour of the
+    extractive one. Either way the caller gets an answer it can trace.
+    """
+    result = _run(body.question, apply_gate=True, include_candidates=False, generate=True)
+    return AskResponse(**_payload(result))

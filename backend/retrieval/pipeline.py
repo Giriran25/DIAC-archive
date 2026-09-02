@@ -39,6 +39,7 @@ class Timings:
     rerank_ms: float = 0.0
     gate_ms: float = 0.0
     answer_ms: float = 0.0
+    generate_ms: float = 0.0
     total_ms: float = 0.0
 
     def as_dict(self) -> dict:
@@ -55,6 +56,13 @@ class RetrievalResult:
     timings: Timings = field(default_factory=Timings)
     counts: dict = field(default_factory=dict)
     candidates: list[dict] = field(default_factory=list)
+
+    # --- set by answer(); untouched by pure retrieval ---
+    grounded: bool = False              # produced by a model, citations validated
+    provider: str = "extractive"
+    generation: dict = field(default_factory=dict)
+    citations: dict = field(default_factory=dict)
+    degraded: str | None = None         # why the generated answer was not used
 
 
 # Sentence splitting mirrors the frontend splitter so an extracted answer
@@ -261,6 +269,106 @@ def search(
     return result
 
 
+def answer(
+    conn: sqlite3.Connection,
+    question: str,
+    *,
+    evidence_k: int | None = None,
+    provider=None,
+    use_reranker: bool | None = None,
+) -> RetrievalResult:
+    """The visitor path: retrieve, gate, and only then generate.
+
+    Ordering is the whole point.
+
+      * The gate runs BEFORE generation, so a question the archive cannot
+        support costs zero model time and cannot produce prose at all.
+      * Citation validation runs AFTER generation, so an answer that cites
+        something it was not given is discarded rather than shown.
+
+    Every failure below the gate degrades to the extractive answer, which
+    is verbatim from the evidence and therefore always citable. A visitor
+    always gets something back.
+    """
+    from ..llm import get_fallback, get_provider
+    from . import citations as cit
+
+    result = search(conn, question, evidence_k=evidence_k, apply_gate=True,
+                    use_reranker=use_reranker)
+
+    # Gate refused: no model call, no evidence shown, nothing to validate.
+    if result.decision is None or not result.decision.passed:
+        result.grounded = False
+        result.provider = "none"
+        result.fallback = True
+        return result
+
+    # The extractive answer computed by search() is the standing fallback;
+    # generation only replaces it if it validates.
+    extractive_answer = result.answer
+    llm = provider if provider is not None else get_provider()
+    result.provider = llm.name()
+
+    started = time.perf_counter()
+    gen = llm.generate(question, result.evidence)
+    result.timings.generate_ms = (time.perf_counter() - started) * 1000
+    result.timings.total_ms += result.timings.generate_ms
+    result.generation = dict(gen.timings or {})
+    result.generation["ok"] = gen.ok
+    if gen.error:
+        result.generation["error"] = gen.error
+
+    # 1. provider failed outright
+    if not gen.ok:
+        result.degraded = f"provider failed: {gen.error}"
+        result.answer = extractive_answer or _fallback_text(llm, question, result)
+        result.grounded = False
+        result.fallback = True
+        return result
+
+    # 2. the model itself judged the evidence too thin. It is closer to the
+    #    passages than the gate's thresholds are, so this is respected.
+    if gen.insufficient:
+        result.degraded = "model reported insufficient evidence"
+        result.answer = gate.REFUSAL
+        result.evidence = []
+        result.grounded = False
+        result.fallback = True
+        result.decision = gate.GateDecision(
+            False, "model reported insufficient evidence", gate.REFUSAL,
+            result.decision.relevance, result.decision.coverage, True,
+            result.decision.checks)
+        return result
+
+    # 3. citation validation, against exactly the passages the model was
+    #    shown - not the full retrieved set, or [E3] would be judged
+    #    against evidence the model never saw.
+    from ..llm.qwen import EVIDENCE_MAX
+    supplied = result.evidence[:EVIDENCE_MAX]
+    report = cit.validate(gen.cited, supplied)
+    result.citations = report.as_dict()
+    if not report.valid:
+        result.degraded = f"citations rejected: {report.reason}"
+        result.answer = extractive_answer or _fallback_text(llm, question, result)
+        result.grounded = False
+        result.fallback = True
+        return result
+
+    # 4. accepted - show only the passages the answer actually rests on
+    result.answer = gen.text
+    result.evidence = cit.attach(supplied, report)
+    result.grounded = True
+    result.fallback = False
+    return result
+
+
+def _fallback_text(_provider, question: str, result: RetrievalResult) -> str:
+    """Last resort when search() produced no extractive text either."""
+    from ..llm import get_fallback
+    out = get_fallback().generate(question, result.evidence)
+    return out.text if out.ok else gate.REFUSAL
+
+
 def warm() -> dict:
     """Load models and the index once, at startup, so the first real query
     does not pay for it. Returns what was loaded, for /api/health."""
@@ -282,4 +390,20 @@ def warm() -> dict:
     if idx is not None:
         out["index"] = True
         out["vectors"] = idx.size
+
+    # The LLM loads in the background: on this laptop a cold load takes
+    # minutes, and lexical search plus the extractive path are fully
+    # usable meanwhile, so startup must not block on it.
+    try:
+        from ..llm import get_provider
+        provider = get_provider()
+        health = provider.health()
+        out["llm"] = provider.name()
+        out["llm_available"] = health.available
+        out["llm_loaded"] = health.loaded
+        out["llm_detail"] = health.detail
+        if health.available and not health.loaded:
+            provider.warm()
+    except Exception as exc:
+        out["llm_error"] = str(exc)
     return out

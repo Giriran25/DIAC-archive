@@ -15,7 +15,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from .api import health, search
+from .api import archive, archivist, assist, collections, health, manuscript, search
 from .core import config
 
 log = logging.getLogger("daic")
@@ -79,6 +79,11 @@ async def limit_body_size(request: Request, call_next):
 
 app.include_router(health.router, prefix="/api", tags=["system"])
 app.include_router(search.router, prefix="/api", tags=["retrieval"])
+app.include_router(archive.router, prefix="/api", tags=["archive"])
+app.include_router(assist.router, prefix="/api", tags=["assist"])
+app.include_router(manuscript.router, prefix="/api", tags=["manuscript"])
+app.include_router(collections.router, prefix="/api", tags=["collections"])
+app.include_router(archivist.router, prefix="/api", tags=["archivist"])
 
 
 @app.get("/api", tags=["system"])
@@ -87,5 +92,5 @@ def root() -> dict:
         "archive": config.ARCHIVE_NAME,
         "service": "edge-server",
         "phase": health.PHASE,
-        "endpoints": ["/api/health", "/api/search", "/api/ask", "/api/docs"],
+        "endpoints": sorted({r.path for r in app.routes if r.path.startswith("/api")}),
     }

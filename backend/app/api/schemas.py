@@ -81,4 +81,5 @@ class HealthResponse(BaseModel):
     stats: ArchiveStats
     capabilities: dict[str, bool]
     retrieval: dict | None = None
+    subsystems: dict | None = None
     detail: str | None = None

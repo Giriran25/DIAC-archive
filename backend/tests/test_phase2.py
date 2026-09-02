@@ -328,4 +328,6 @@ def test_health_reports_phase2_capabilities():
         assert caps["vector_search"] is True
         assert caps["hybrid_retrieval"] is True
         assert caps["evidence_gate"] is True
-        assert caps["generation"] is False       # Phase 3, not yet
+        # Retrieval must not depend on generation being present: the
+        # extractive path stands on its own.
+        assert caps["extractive_answer"] is True

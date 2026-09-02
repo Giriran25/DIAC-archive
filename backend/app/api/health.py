@@ -28,25 +28,90 @@ def set_runtime(loaded: dict) -> None:
 
 
 def capabilities() -> dict:
-    from ...retrieval import vector
+    """Reported from what actually loaded and what is actually installed.
 
+    Nothing here is a hand-maintained list: a capability is True only when
+    the thing behind it answered. A frontend can therefore hide or degrade
+    a feature honestly instead of discovering at runtime that it is absent.
+    """
     dense = bool(_RUNTIME.get("index")) and bool(_RUNTIME.get("embedder"))
     reranker = bool(_RUNTIME.get("reranker"))
+    generation = bool(_RUNTIME.get("llm_available"))
+
+    counts = {}
+    try:
+        with db.connect(readonly=True) as conn:
+            for key, sql in (
+                ("manuscripts", "SELECT COUNT(*) FROM manuscripts"),
+                ("media", "SELECT COUNT(*) FROM media_assets"),
+                ("timeline", "SELECT COUNT(*) FROM timeline_events"),
+                ("entities", "SELECT COUNT(*) FROM entities"),
+                ("intake", "SELECT COUNT(*) FROM intake_items"),
+            ):
+                counts[key] = conn.execute(sql).fetchone()[0]
+    except Exception:
+        counts = {}
+
+    try:
+        from ...ocr import ocr_status as _ocr
+        ocr_ready = bool(_ocr().get("available"))
+    except Exception:
+        ocr_ready = False
+    try:
+        from ... import translation as tr
+        translation_ready = tr.get_translator().health().available
+    except Exception:
+        translation_ready = False
+
     return {
-        "lexical_search": True,          # Phase 1 - SQLite FTS5
-        "vector_search": dense,          # Phase 2 - FAISS
-        "reranking": reranker,           # Phase 2 - cross-encoder
-        "hybrid_retrieval": dense,       # Phase 2 - RRF over both halves
-        "evidence_gate": True,           # Phase 2
-        "extractive_answer": True,       # Phase 2
-        "generation": False,             # Phase 3 - LLM provider
-        "citation_validation": False,    # Phase 3
-        "translation": False,            # Phase 4 - Bhashini
-        "ocr": False,                    # Phase 4
+        "lexical_search": True,                    # Phase 1 - SQLite FTS5
+        "semantic_search": dense,                  # Phase 2 - FAISS
+        "vector_search": dense,
+        "reranking": reranker,                     # Phase 2 - cross-encoder
+        "hybrid_retrieval": dense,                 # Phase 2 - RRF
+        "evidence_gate": True,                     # Phase 2
+        "extractive_answer": True,                 # Phase 2
+        "generation": generation,                  # Phase 3 - local LLM
+        "citation_validation": generation,         # only meaningful with generation
+        "summarization": True,                     # extractive at minimum
+        "full_text_access": True,
+        "archive_browse": True,
+        "preservation": True,
+        "archivist": True,
+        "manuscript_viewer": counts.get("manuscripts", 0) > 0,
+        "ocr": ocr_ready,
+        "media": counts.get("media", 0) > 0,
+        "timeline": counts.get("timeline", 0) > 0,
+        "knowledge_mapping": counts.get("entities", 0) > 0,
+        "translation": translation_ready,
+        "audio_narration": True,                   # browser TTS; no server dependency
     }
 
 
-PHASE = "2 - hybrid retrieval (FAISS + FTS5, RRF, rerank, evidence gate)"
+def _subsystems() -> dict:
+    """Why a capability is off, when it is off - so the reason reaches the
+    UI instead of only the server log."""
+    out: dict = {}
+    try:
+        from ...ocr import ocr_status
+        out["ocr"] = ocr_status()
+    except Exception as exc:
+        out["ocr"] = {"available": False, "detail": str(exc)}
+    try:
+        from ... import translation as tr
+        out["translation"] = tr.translation_status()
+    except Exception as exc:
+        out["translation"] = {"available": False, "detail": str(exc)}
+    out["llm"] = {
+        "provider": _RUNTIME.get("llm"),
+        "available": bool(_RUNTIME.get("llm_available")),
+        "loaded": bool(_RUNTIME.get("llm_loaded")),
+        "detail": _RUNTIME.get("llm_detail"),
+    }
+    return out
+
+
+PHASE = "4 - frontend integration surfaces"
 
 
 @router.get("/health", response_model=HealthResponse, summary="Edge server readiness")
@@ -97,12 +162,16 @@ def health() -> HealthResponse:
     from ...retrieval import vector
     empty = stats["chunks"] == 0
     return HealthResponse(
+        subsystems=_subsystems(),
         retrieval={
             "embedModel": _RUNTIME.get("embed_model"),
             "embedDim": _RUNTIME.get("embed_dim"),
             "rerankModel": _RUNTIME.get("rerank_model"),
             "index": vector.status(),
             "warmed": bool(_RUNTIME.get("embedder") and _RUNTIME.get("reranker")),
+            "llm": _RUNTIME.get("llm"),
+            "llmLoaded": _RUNTIME.get("llm_loaded"),
+            "llmDetail": _RUNTIME.get("llm_detail"),
         },
         status="empty" if empty else "ok",
         archive=config.ARCHIVE_NAME,

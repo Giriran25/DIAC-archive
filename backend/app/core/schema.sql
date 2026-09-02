@@ -188,7 +188,7 @@ END;
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS entities (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    kind        TEXT NOT NULL CHECK (kind IN ('person','work','event','theme')),
+    kind        TEXT NOT NULL CHECK (kind IN ('person','work','event','place','theme','document','speech')),
     name        TEXT NOT NULL,
     description TEXT,
     UNIQUE (kind, name)
@@ -237,3 +237,134 @@ CREATE TABLE IF NOT EXISTS schema_meta (
 
 INSERT OR IGNORE INTO schema_meta(key, value) VALUES ('schema_version', '1');
 INSERT OR IGNORE INTO schema_meta(key, value) VALUES ('archive_name', 'DAIC ARCHIVE');
+
+
+-- ===========================================================================
+-- Phase 4 - frontend-integration surfaces
+--
+-- Added additively; nothing above this line changed. Every table here is
+-- created IF NOT EXISTS so an existing archive upgrades in place without
+-- losing the ingested corpus.
+-- ===========================================================================
+
+-- ---------------------------------------------------------------------------
+-- manuscripts - scanned material with a human review loop (PS req 5, 15)
+--
+-- The hard rule this schema enforces: OCR text is NOT authoritative until a
+-- human approves it. `review_status` gates whether a page may be indexed,
+-- and the retrieval index only ever draws on approved rows.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS manuscripts (
+    id              TEXT PRIMARY KEY,
+    title           TEXT NOT NULL,
+    description     TEXT,
+    collection      TEXT,
+    source          TEXT,
+    source_path     TEXT,               -- repo-relative directory of originals
+    paired_pdf      TEXT,               -- companion PDF, when one exists
+    page_count      INTEGER NOT NULL DEFAULT 0,
+    licence         TEXT,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS manuscript_pages (
+    id              INTEGER PRIMARY KEY,
+    manuscript_id   TEXT NOT NULL REFERENCES manuscripts(id) ON DELETE CASCADE,
+    page            INTEGER NOT NULL,   -- 1-based
+    source_image    TEXT NOT NULL,      -- original scan (JP2), repo-relative
+    image_path      TEXT,               -- derived web image, repo-relative
+    width           INTEGER,
+    height          INTEGER,
+
+    -- Candidate transcription awaiting review.
+    ocr_text        TEXT,
+    ocr_engine      TEXT,               -- which engine produced it, verbatim
+    -- Real engine score only. NULL when the producing engine reports none;
+    -- never populated with an estimate.
+    ocr_confidence  REAL,
+    caption         TEXT,               -- publisher's own caption, if present
+
+    corrected_text  TEXT,               -- archivist's correction, if any
+    review_status   TEXT NOT NULL DEFAULT 'pending'
+                    CHECK (review_status IN ('pending','in_review','approved','rejected')),
+    reviewer        TEXT,
+    reviewed_at     TEXT,
+    review_note     TEXT,
+    chunk_id        INTEGER REFERENCES chunks(id) ON DELETE SET NULL,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (manuscript_id, page)
+);
+
+CREATE INDEX IF NOT EXISTS idx_mspage_status ON manuscript_pages(review_status);
+CREATE INDEX IF NOT EXISTS idx_mspage_ms     ON manuscript_pages(manuscript_id, page);
+
+
+-- ---------------------------------------------------------------------------
+-- media - audio/video archive (PS req 8) with timestamped segments (PS req G)
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS media_assets (
+    id              TEXT PRIMARY KEY,
+    title           TEXT NOT NULL,
+    media_type      TEXT NOT NULL CHECK (media_type IN ('audio','video')),
+    description     TEXT,
+    source          TEXT,
+    provenance      TEXT,
+    file_path       TEXT NOT NULL,      -- repo-relative
+    thumbnail_path  TEXT,
+    duration_ms     INTEGER,
+    byte_size       INTEGER,
+    sha256          TEXT,
+    licence         TEXT,
+    -- Whether this file may be streamed to a client. The 950 MB master is
+    -- registered for provenance but must never be served over the demo LAN.
+    servable        INTEGER NOT NULL DEFAULT 1,
+    unservable_reason TEXT,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS media_segments (
+    id              INTEGER PRIMARY KEY,
+    media_id        TEXT NOT NULL REFERENCES media_assets(id) ON DELETE CASCADE,
+    seq             INTEGER NOT NULL,
+    start_ms        INTEGER NOT NULL,
+    end_ms          INTEGER NOT NULL,
+    text            TEXT NOT NULL,
+    speaker         TEXT,
+    origin          TEXT NOT NULL,      -- 'asr' | 'manual'; never invented
+    confidence      REAL,
+    verification_status TEXT NOT NULL DEFAULT 'pending'
+                    CHECK (verification_status IN ('pending','in_review','approved','rejected')),
+    chunk_id        INTEGER REFERENCES chunks(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_mediaseg ON media_segments(media_id, start_ms);
+
+
+-- ---------------------------------------------------------------------------
+-- intake - archivist upload -> review -> approve -> index (PS req 14)
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS intake_items (
+    id              TEXT PRIMARY KEY,
+    filename        TEXT NOT NULL,
+    file_path       TEXT NOT NULL,
+    sha256          TEXT,
+    byte_size       INTEGER,
+    detected_type   TEXT,
+    title           TEXT,
+    metadata_json   TEXT,
+    page_count      INTEGER,
+    char_count      INTEGER,
+    chunk_estimate  INTEGER,
+    preview         TEXT,
+    status          TEXT NOT NULL DEFAULT 'uploaded'
+                    CHECK (status IN ('uploaded','extracting','pending_review',
+                                      'approved','rejected','indexed','failed')),
+    document_id     TEXT REFERENCES documents(id) ON DELETE SET NULL,
+    submitted_by    TEXT,
+    submitted_at    TEXT NOT NULL DEFAULT (datetime('now')),
+    reviewed_by     TEXT,
+    reviewed_at     TEXT,
+    note            TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_intake_status ON intake_items(status);

@@ -294,11 +294,13 @@ def test_health_endpoint_reports_capabilities():
         caps = body["capabilities"]
         # The lexical half is Phase 1's and must always be present.
         assert caps["lexical_search"] is True
-        # Nothing may claim a capability it has not built. Generation is
-        # Phase 3; this assertion is what stops the flag being flipped
-        # before the LLM provider actually exists.
-        assert caps["generation"] is False
-        assert caps["citation_validation"] is False
+        # A capability must never be claimed unless the thing behind it is
+        # actually available - so this is checked against the provider
+        # rather than against a fixed expectation.
+        from backend.llm import QwenProvider
+        assert caps["generation"] is QwenProvider().health().available
+        # Citation validation is only meaningful where generation happens.
+        assert caps["citation_validation"] is caps["generation"]
 
 
 @needs_archive
