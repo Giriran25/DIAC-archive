@@ -137,6 +137,9 @@ def _flush(buffer: list[tuple[Page, str]], seq: int) -> Chunk | None:
 
     printed = [p.printed_page for p in pages if p.printed_page is not None]
 
+    section_name = (first.section or "").strip().lower()
+    kind = "toc" if section_name in {"contents", "table of contents"} else classify(text)
+
     return Chunk(
         seq=seq,
         text=text,
@@ -147,7 +150,7 @@ def _flush(buffer: list[tuple[Page, str]], seq: int) -> Chunk | None:
         char_start=start,
         char_end=start + len(text),
         section=first.section,
-        kind=classify(text),
+        kind=kind,
     )
 
 

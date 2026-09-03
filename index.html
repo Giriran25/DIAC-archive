@@ -2,14 +2,32 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+    <title>DAIC ARCHIVE — Dr. Ambedkar International Centre</title>
+    <meta name="description" content="Digital heritage archive of Dr. B. R. Ambedkar's writings, speeches and constitutional debates. Every answer is traceable to a printed page." />
+
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- The kiosk chrome takes the archive's ink colour rather than the
+         browser default, so a tablet in standalone mode looks like one
+         application instead of a page inside a browser. -->
     <meta name="theme-color" content="#141c30" />
-    <title>daic-archive</title>
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="DAIC ARCHIVE" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+    <!-- Fonts are served from this origin (public/fonts). The archive runs
+         on a laptop the tablet reaches over the LAN, often with no route to
+         the internet, so nothing in the page may depend on a CDN. -->
   </head>
   <body>
     <div id="root"></div>
+    <noscript>
+      DAIC ARCHIVE needs JavaScript to read the archive. The collection itself
+      remains available from the Dr. Ambedkar International Centre.
+    </noscript>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

@@ -25,7 +25,7 @@ const PIPELINE_STEPS = [
 export default function UploadWorkflow({ t, setSub }) {
   const [formData, setFormData] = useState({
     title: "",
-    filename: "ambedkar_speech_folio_1942.pdf",
+    filename: "Data/SIH_heritage_docs/Volume1.pdf",
     type: "Writing",
     collection: "Writings and Speeches",
     language: "English",
@@ -44,24 +44,30 @@ export default function UploadWorkflow({ t, setSub }) {
     setProcessing(true);
     setUploadError(null);
     setCurrentStep(1); // Extraction
-
-    setTimeout(async () => {
+    try {
       setCurrentStep(2); // Metadata
-      try {
-        const res = await api.upload(formData);
-        setCurrentStep(3); // Pending Review
-        setUploadedSubmission(res.item || res.submission || null);
-        if (!res.item && !res.submission) {
-          setUploadError("The archive did not return a staged submission.");
-          setCurrentStep(0);
-        }
-      } catch (err) {
-        setUploadError(err?.userMessage || "The document could not be staged for review.");
+      const res = await api.upload({
+        ...formData,
+        file_path: formData.filename,
+        doc_type: formData.type,
+        volume: formData.collection,
+        date_text: formData.date,
+        language: "en",
+        licence: formData.description || null,
+        submitted_by: "archivist",
+      });
+      setCurrentStep(3); // Pending Review
+      setUploadedSubmission(res.item || res.submission || null);
+      if (!res.item && !res.submission) {
+        setUploadError("The archive did not return a staged submission.");
         setCurrentStep(0);
-      } finally {
-        setProcessing(false);
       }
-    }, 1000);
+    } catch (err) {
+      setUploadError(err?.userMessage || "The document could not be staged for review.");
+      setCurrentStep(0);
+    } finally {
+      setProcessing(false);
+    }
   };
 
   return (
@@ -168,10 +174,11 @@ export default function UploadWorkflow({ t, setSub }) {
             </div>
 
             <div>
-              <label className="font-bold text-[#5a4420] block mb-1">Source Filename / PDF</label>
+              <label className="font-bold text-[#5a4420] block mb-1">Existing File Path</label>
               <input
                 required
                 type="text"
+                placeholder="Data/path/to/document.pdf"
                 value={formData.filename}
                 onChange={(e) => setFormData({ ...formData, filename: e.target.value })}
                 className="w-full p-2.5 rounded-lg border border-[#c9b98c] bg-white outline-none focus:border-[#b3862c]"
@@ -203,7 +210,7 @@ export default function UploadWorkflow({ t, setSub }) {
             </div>
 
             <div>
-              <label className="font-bold text-[#5a4420] block mb-1">Collection</label>
+              <label className="font-bold text-[#5a4420] block mb-1">Volume</label>
               <input
                 type="text"
                 value={formData.collection}
@@ -213,7 +220,7 @@ export default function UploadWorkflow({ t, setSub }) {
             </div>
 
             <div className="sm:col-span-2">
-              <label className="font-bold text-[#5a4420] block mb-1">Description & Archival Provenance</label>
+              <label className="font-bold text-[#5a4420] block mb-1">Licence / Provenance Note</label>
               <textarea
                 rows={3}
                 placeholder="Details of the physical source, edition, and scan resolution..."

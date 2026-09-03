@@ -43,7 +43,7 @@ export default function PendingReview({ t }) {
 
   const handleApprove = async (id) => {
     try {
-      const res = await api.approveItem(id);
+      const res = await api.approveItem(id, { reviewer: "archivist", note: null });
       setActionFeedback({ type: "success", message: res.message || t.approvedNotice });
       setSelectedItem(null);
       await loadPending();
@@ -57,7 +57,7 @@ export default function PendingReview({ t }) {
     e.preventDefault();
     if (!rejectingId) return;
     try {
-      const res = await api.rejectItem(rejectingId, { reason: rejectReason });
+      const res = await api.rejectItem(rejectingId, { reviewer: "archivist", note: rejectReason || null });
       setActionFeedback({ type: "warning", message: res.message || t.rejectedNotice });
       setRejectingId(null);
       setRejectReason("");

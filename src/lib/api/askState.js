@@ -16,6 +16,17 @@
  * re-deriving one from four booleans.
  * ---------------------------------------------------------------------- */
 
+/* Evidence markers are how the backend ties a sentence to a passage, and
+   how citation validation checks it. They are notation, not prose: the
+   evidence list beneath an answer already shows the reader which sources it
+   rests on, so the markers are removed from the text on the way to the
+   screen rather than left as "[E1]" in the middle of a sentence. */
+const MARKER = /\s*\[\s*E\s*\d{1,2}\s*\]/gi;
+
+export function stripMarkers(text) {
+  return String(text || '').replace(MARKER, '').replace(/\s+([.,;:])/g, '$1').trim();
+}
+
 export const ANSWER_STATE = {
   GROUNDED: 'grounded',
   DEGRADED: 'degraded',
@@ -54,7 +65,7 @@ export function readAnswer(payload) {
 
   return {
     state,
-    answer: payload.answer || '',
+    answer: stripMarkers(payload.answer || ''),
     /* A refusal shows no sources. The backend already withholds them;
        this makes it true regardless of what the caller was handed. */
     evidence: state === ANSWER_STATE.REFUSED ? [] : evidence,

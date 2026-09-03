@@ -192,7 +192,7 @@ function AppShell({ startAtLanding = true }) {
             {/* Archivist mode toggle */}
             <button
               onClick={handleArchivistToggle}
-              aria-label={mode === "visitor" ? "Open archivist mode" : "Return to visitor mode"}
+              title={mode === "visitor" ? "Switch to archivist mode" : "Switch to visitor mode"}
               className="daic-chip text-[11px] px-3 py-1.5 rounded-full border flex items-center gap-1.5"
               style={{ fontFamily: FONT_UI, color: CREAM, borderColor: "rgba(244,234,208,0.3)" }}
             >

@@ -15,11 +15,87 @@ The model is a process-wide singleton, warmed at startup.
 
 from __future__ import annotations
 
+import re
 import threading
 import time
 from dataclasses import dataclass
 
 from ..app.core import config
+
+
+# ---------------------------------------------------------------------------
+# Query form
+# ---------------------------------------------------------------------------
+#
+# The cross-encoder is an MS MARCO model, trained on short web queries
+# ("riddle of Rama and Krishna"), not on conversational sentences. A visitor
+# at a kiosk types the sentence form, and the wrapper measurably depresses
+# the score for the SAME passages:
+#
+#     "riddle of Rama and Krishna"                              -> 2.68
+#     "What did Ambedkar write about the riddle of Rama and     -> 1.50
+#      Krishna?"
+#
+# With the evidence floor at 2.5 that difference is the whole answer: the
+# archive refused a question it holds sixty passages about. Stripping the
+# wrapper puts the query in the form the scorer was trained on, so the score
+# reflects the passage rather than the phrasing.
+#
+# This changes only what the SCORER is shown. Retrieval - dense, lexical,
+# RRF - still uses the visitor's words, the gate floor is unchanged, and the
+# evidence returned is the same evidence.
+
+_LEAD_IN = re.compile(
+    r"""^\s*(?:
+        (?:please\s+)?
+        (?:can|could|would|will)\s+you\s+(?:please\s+)?(?:tell\s+me|explain|describe|say)\s*
+      | (?:please\s+)?(?:tell\s+me|explain|describe|summari[sz]e)\s+
+      | what\s+(?:did|does|do|was|were|is|are)\s+
+      | how\s+(?:did|does|do|was|were|is|are)\s+
+      | why\s+(?:did|does|do|was|were|is|are)\s+
+      | when\s+(?:did|does|do|was|were|is|are)\s+
+      | where\s+(?:did|does|do|was|were|is|are)\s+
+      | who\s+(?:did|does|do|was|were|is|are)\s+
+      | what\s+is\s+the\s+relationship\s+between\s+
+      | what\s+
+    )""",
+    re.IGNORECASE | re.VERBOSE,
+)
+
+# Fillers that survive the lead-in strip and carry no retrieval signal.
+_FILLER = re.compile(
+    r"\b(?:ambedkar|dr\.?\s*ambedkar|babasaheb)\s+(?:say|said|says|write|wrote|argue|argued|"
+    r"think|thought|believe|believed|state|stated|mean|meant)\b(?:\s+about)?",
+    re.IGNORECASE,
+)
+
+_TRAILING = re.compile(r"[\s?.!]+$")
+
+
+def query_for_scoring(question: str) -> str:
+    """Reduce a conversational question to the keyword form the
+    cross-encoder was trained on.
+
+    Conservative by construction: if stripping would leave too little to
+    score against, the original question is returned unchanged. A short
+    query that loses its content words scores worse, not better.
+    """
+    original = (question or "").strip()
+    if not original:
+        return original
+
+    reduced = _LEAD_IN.sub("", original)
+    reduced = _FILLER.sub("", reduced)
+    reduced = re.sub(r"\s+", " ", reduced)
+    reduced = _TRAILING.sub("", reduced).strip()
+    # Leading connectives left behind by the strip ("about the riddle...").
+    reduced = re.sub(r"^(?:about|regarding|concerning|on)\s+", "", reduced,
+                     flags=re.IGNORECASE).strip()
+
+    # Two content words is the floor; below that the original is safer.
+    if len(reduced.split()) < 2 or len(reduced) < 8:
+        return original
+    return reduced
 
 
 @dataclass
@@ -70,7 +146,7 @@ class Reranker:
             return []
 
         passages = [texts.get(c.chunk_id, "") for c in candidates]
-        scores = self.score(query, passages)
+        scores = self.score(query_for_scoring(query), passages)
 
         scored = [
             RerankedHit(

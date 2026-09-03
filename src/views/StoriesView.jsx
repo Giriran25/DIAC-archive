@@ -5,10 +5,12 @@ import {
 import AsyncState from "../components/ui/AsyncState.jsx";
 import { api } from "../lib/api/endpoints.js";
 import { useArchive } from "../lib/api/useArchive.js";
+import { eventHeading, shorten } from "../lib/text.js";
 import {
-  FONT_DISPLAY, FONT_BODY, FONT_UI,
-  GOLD, INKTEXT,
-} from "../lib/tokens.js";
+  pageTitle, itemTitle, archivalBody, eyebrow, meta, provenance,
+  CARD_CLASS, CARD_SELECTED_CLASS, CARD_PAD, clampLines,
+} from "../lib/type.js";
+import { FONT_UI, GOLD, INKTEXT } from "../lib/tokens.js";
 
 /* ---------------------------------------------------------------------- *
  * StoriesView — landmark episodes, told only as far as the sources go.
@@ -47,6 +49,9 @@ export default function StoriesView({ t, openArticle }) {
   const sources = detail?.sources ?? [];
   const source = sources[Math.min(sourceIndex, Math.max(0, sources.length - 1))] || null;
 
+  const { heading: storyHeading, caption: storyCaption } = eventHeading(story || {});
+  const storyDate = story ? (story.date || story.year) : "";
+
   const select = (id) => {
     setSelectedId(id);
     setSourceIndex(0);
@@ -56,13 +61,13 @@ export default function StoriesView({ t, openArticle }) {
     <main id="main-content" className="max-w-5xl mx-auto px-4 sm:px-6 pb-24">
       {/* Header */}
       <div className="pt-12 pb-8 text-center daic-reveal">
-        <p className="uppercase text-xs tracking-[0.25em] mb-3" style={{ fontFamily: FONT_UI, color: GOLD }}>
+        <p className="mb-3" style={{ ...eyebrow, color: GOLD }}>
           {t.storyWalkthrough || "Memorial Storytelling"}
         </p>
-        <h1 className="text-3xl md:text-5xl font-bold" style={{ fontFamily: FONT_DISPLAY, color: INKTEXT }}>
+        <h1 className="text-3xl md:text-4xl" style={pageTitle}>
           Oral Histories &amp; Landmark Narratives
         </h1>
-        <p className="max-w-xl mx-auto text-sm md:text-base text-[#6b6350] mt-3" style={{ fontFamily: FONT_UI }}>
+        <p className="max-w-xl mx-auto mt-3 text-sm" style={{ ...provenance, color: "#6b6350" }}>
           Turning points told through the archive&rsquo;s own record, read beside the
           passages that document them.
         </p>
@@ -85,31 +90,52 @@ export default function StoriesView({ t, openArticle }) {
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-10">
             {stories.map((s) => {
               const isSelected = s.id === currentId;
+              /* Plate captions are not all usable as titles. When one is
+                 not, the date leads and the caption sits beneath it at
+                 reading size — the text is unchanged, only its role is. */
+              const { heading, caption } = eventHeading(s);
               return (
                 <button
                   key={s.id}
                   onClick={() => select(s.id)}
                   aria-pressed={isSelected}
-                  className={`daic-card text-left p-5 rounded-xl border transition-all duration-200 flex flex-col justify-between ${
-                    isSelected
-                      ? "bg-[#1c2c4d] text-[#f4ead0] border-[#b3862c] shadow-md ring-2 ring-[#b3862c]/50"
-                      : "bg-[#faf4e4] border-[#d8c79a] text-[#5a4420] hover:border-[#b3862c]"
-                  }`}
+                  className={`${isSelected ? CARD_SELECTED_CLASS : CARD_CLASS} ${CARD_PAD} text-left flex flex-col justify-between gap-4`}
                 >
-                  <div>
-                    <div className="flex items-center gap-1.5 text-[10px] uppercase font-semibold tracking-wider mb-2 opacity-80" style={{ fontFamily: FONT_UI }}>
+                  <div className="min-w-0">
+                    <div
+                      className="flex items-center gap-1.5 mb-2"
+                      style={{ ...meta, color: isSelected ? "#d9ac4f" : undefined,
+                               textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 600 }}
+                    >
                       <Calendar size={11} aria-hidden="true" /> {s.date || s.year}
                     </div>
-                    <h3 className={`text-lg font-bold mb-1.5 leading-snug ${isSelected ? "text-[#f4ead0]" : "text-[#141c30]"}`} style={{ fontFamily: FONT_DISPLAY }}>
-                      {s.title}
+
+                    <h3
+                      className="mb-1.5 text-base"
+                      style={{ ...itemTitle, color: isSelected ? "#f4ead0" : INKTEXT, ...clampLines(2) }}
+                    >
+                      {heading}
                     </h3>
-                    <p className={`text-xs line-clamp-2 ${isSelected ? "text-[#b8c6e0]" : "text-[#6b6350]"}`} style={{ fontFamily: FONT_UI }}>
-                      {s.summary}
-                    </p>
+
+                    {caption && (
+                      <p
+                        className="text-xs"
+                        style={{ ...archivalBody, color: isSelected ? "#b8c6e0" : "#6b6350",
+                                 lineHeight: 1.5, ...clampLines(2) }}
+                      >
+                        {shorten(caption, 120)}
+                      </p>
+                    )}
                   </div>
-                  <div className="mt-4 pt-3 border-t border-current/20 flex items-center justify-between text-[11px]" style={{ fontFamily: FONT_UI }}>
-                    <span>{s.sourceCount} sourced passage{s.sourceCount === 1 ? "" : "s"}</span>
-                    <span className="font-semibold inline-flex items-center gap-1">
+
+                  <div
+                    className="pt-3 border-t border-current/20 flex items-center justify-between gap-2"
+                    style={{ ...meta, color: isSelected ? "#b8c6e0" : undefined }}
+                  >
+                    <span className="truncate">
+                      {s.sourceCount} sourced passage{s.sourceCount === 1 ? "" : "s"}
+                    </span>
+                    <span className="font-semibold inline-flex items-center gap-1 shrink-0">
                       Read story <ChevronRight size={12} className="daic-arrow" aria-hidden="true" />
                     </span>
                   </div>
@@ -132,22 +158,40 @@ export default function StoriesView({ t, openArticle }) {
                   <div className="p-7 md:p-10 border-b border-[#d8c79a] bg-[#f4ead0]">
                     <div className="flex items-center gap-2 mb-2 flex-wrap">
                       {story.category && (
-                        <span className="text-xs px-2.5 py-0.5 rounded-full bg-[#efe0bb] text-[#5a4420] font-semibold uppercase tracking-wider" style={{ fontFamily: FONT_UI }}>
+                        <span
+                          className="px-2.5 py-0.5 rounded-full bg-[#efe0bb] text-[#5a4420]"
+                          style={{ ...meta, textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 600 }}
+                        >
                           {story.category}
                         </span>
                       )}
+                      <span style={{ ...meta, fontWeight: 600 }}>{storyDate}</span>
                       {story.location && (
-                        <span className="text-xs text-[#8a7f63] inline-flex items-center gap-1" style={{ fontFamily: FONT_UI }}>
+                        <span className="inline-flex items-center gap-1" style={meta}>
                           <MapPin size={11} color={GOLD} aria-hidden="true" /> {story.location}
                         </span>
                       )}
                     </div>
-                    <h2 className="text-2xl md:text-4xl font-bold mb-2" style={{ fontFamily: FONT_DISPLAY, color: INKTEXT }}>
-                      {story.title}
+
+                    {/* The date leads when the plate caption cannot carry a
+                        heading. A caption is never enlarged into a title it
+                        was not written to be. */}
+                    <h2 className="text-2xl md:text-3xl mb-2" style={pageTitle}>
+                      {storyHeading}
                     </h2>
-                    <p className="text-base md:text-lg text-[#4a4330] max-w-3xl leading-relaxed" style={{ fontFamily: FONT_BODY }}>
-                      {story.detail || story.summary}
-                    </p>
+
+                    {storyCaption && (
+                      <p className="max-w-3xl text-base" style={archivalBody}>
+                        <span style={{ ...meta, marginRight: "0.4em" }}>Plate caption:</span>
+                        {storyCaption}
+                      </p>
+                    )}
+
+                    {!storyCaption && (story.detail || story.summary) && (
+                      <p className="max-w-3xl text-base md:text-lg" style={archivalBody}>
+                        {story.detail || story.summary}
+                      </p>
+                    )}
                   </div>
 
                   {/* Passage navigation — one tab per real source */}
@@ -179,7 +223,7 @@ export default function StoriesView({ t, openArticle }) {
                         <span className="text-xs font-bold uppercase tracking-widest text-[#9c3d2e] block mb-1" style={{ fontFamily: FONT_UI }}>
                           {t.passage || "Passage"} {sourceIndex + 1}
                         </span>
-                        <h3 className="text-xl md:text-2xl font-bold" style={{ fontFamily: FONT_DISPLAY, color: INKTEXT }}>
+                        <h3 className="text-lg md:text-xl" style={itemTitle}>
                           {source.documentTitle}
                         </h3>
                         <p className="text-xs mt-1" style={{ fontFamily: FONT_UI, color: "#8a7f63" }}>

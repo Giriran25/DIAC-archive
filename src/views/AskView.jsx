@@ -11,6 +11,7 @@ import { splitSentences } from "../lib/retrieval.js";
 import { api } from "../lib/api/endpoints.js";
 import { ApiError } from "../lib/api/client.js";
 import { readAnswer, ANSWER_STATE } from "../lib/api/askState.js";
+import { refusalWording, degradedWording, provenanceLabel } from "../lib/api/answerCopy.js";
 import { PRESET_QUESTIONS } from "../lib/i18n.js";
 import {
   FONT_BODY, FONT_UI,
@@ -181,17 +182,19 @@ export default function AskView({ lang, t, reader, seed, clearSeed, openArticle 
                 </p>
               )}
 
+              {/* The backend's own reason is a diagnostic - it names the
+                  scorer and prints the threshold it missed. That belongs in
+                  the API response and the logs, not on a kiosk screen, so
+                  the state is translated into plain wording here. */}
               {m.responseType === "degraded" && (
                 <p className="mt-1.5 text-[11px]" style={{ fontFamily: FONT_UI, color: "#5a4420" }}>
-                  {t.degradedNote}
-                  {/* Why the archive fell back, in its own words rather than ours. */}
-                  {m.degradedReason ? ` (${m.degradedReason})` : null}
+                  {degradedWording(m.degradedReason)}
                 </p>
               )}
 
-              {m.responseType === "refused" && m.gateReason && (
+              {m.responseType === "refused" && (
                 <p className="mt-1.5 text-[11px]" style={{ fontFamily: FONT_UI, color: "#5a4420" }}>
-                  Reason given by the archive: {m.gateReason}
+                  {refusalWording(m.gateReason)}
                 </p>
               )}
 
@@ -219,13 +222,15 @@ export default function AskView({ lang, t, reader, seed, clearSeed, openArticle 
                     t={t}
                     compact
                   />
-                  {m.provider && (
+                  {/* How the answer was produced, in words. The provider
+                      identifier itself ("extractive", "openrouter:...") is
+                      an internal name and is never shown. */}
+                  {provenanceLabel(m.responseType, m.provider) && (
                     <span
                       className="text-[10px] px-2 py-0.5 rounded-full"
                       style={{ backgroundColor: "#efe0bb", color: "#5a4420", fontFamily: FONT_UI }}
-                      title="The component that produced this answer"
                     >
-                      {m.provider}
+                      {provenanceLabel(m.responseType, m.provider)}
                     </span>
                   )}
                 </div>

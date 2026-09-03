@@ -12,6 +12,8 @@ keep correct.
 
 from __future__ import annotations
 
+import re
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, model_validator
 
@@ -19,9 +21,14 @@ from ... import translation as tr
 from ...llm import get_fallback, get_provider
 from ...retrieval import citations as cit
 from ...retrieval import gate, pipeline
+from ...retrieval.evidence import to_evidence
+from ...retrieval.prose import reads_as_prose
 from ..core import config, db
 
 router = APIRouter()
+
+#: Evidence markers are internal notation, not something a reader needs.
+_MARKER = re.compile(r"\s*\[\s*E\s*\d{1,2}\s*\]", re.IGNORECASE)
 
 SUMMARY_INSTRUCTION = (
     "Summarise the evidence below in 3 to 5 short bullet points. "
@@ -50,10 +57,71 @@ class TranslateRequest(BaseModel):
     target_language: str = Field(max_length=5)
 
 
+# ---------------------------------------------------------------------------
+# Document summaries
+# ---------------------------------------------------------------------------
+#
+# Summarising a whole volume is not the same task as answering a question,
+# and running it through the question path was wrong in two ways.
+#
+# It refused: the relevance gate asks "does the archive hold anything
+# relevant to this query", and a query built from a volume title plus its
+# section names scores low against every passage, so five of the seven
+# documents in the archive could not be summarised at all.
+#
+# And it was unscoped: retrieval ran over the whole corpus, so a summary of
+# Volume 1 could be assembled from passages in Volume 3. For a summary the
+# subject is already chosen; relevance is guaranteed by scoping to the
+# document, which is a stronger guarantee than the gate was providing.
+
+_SUMMARY_SELECT = """
+    SELECT c.*,
+           d.title AS doc_title, d.volume AS doc_volume, d.doc_type AS doc_type,
+           d.date_text AS doc_date, d.author AS doc_author, d.source AS doc_source,
+           d.file_path AS doc_path, d.extraction_method AS extraction_method
+      FROM chunks c JOIN documents d ON d.id = c.document_id
+     WHERE c.document_id = ?
+       AND c.chunk_kind = 'body'
+       AND c.char_count >= 400
+       AND c.printed_page_start IS NOT NULL
+     ORDER BY c.seq
+"""
+
+def _document_passages(conn, document_id: str, limit: int) -> list[dict]:
+    """Representative body passages, spread across the whole document.
+
+    Taking the first N would summarise the front matter of a 500-page
+    volume. Sampling evenly across the sequence means the summary reflects
+    the work rather than its opening pages. Table-of-contents and listing
+    chunks are excluded here but remain readable in the archive - they are
+    navigation, not substance.
+
+    Every passage kept carries a printed page number, so each line of the
+    summary can be followed back to a page a reader can turn to.
+    """
+    rows = [r for r in conn.execute(_SUMMARY_SELECT, (document_id,))
+            if reads_as_prose(r["text"])]
+    if not rows:
+        return []
+    if len(rows) <= limit:
+        picked = rows
+    else:
+        step = len(rows) / float(limit)
+        picked = [rows[int(i * step)] for i in range(limit)]
+    return [to_evidence(r) for r in picked]
+
+
 @router.post("/summarize", summary="Grounded summary")
 def summarize(body: SummarizeRequest) -> dict:
-    """Builds a query from the requested subject, runs the normal pipeline,
-    and asks the provider for bullets instead of prose."""
+    """Summarise a document, a passage, or supplied text.
+
+    A document summary is scoped to that document and needs no relevance
+    gate; a passage or free-text summary still goes through the normal
+    retrieval path and is gated like any other question.
+    """
+    scoped_evidence: list[dict] | None = None
+    decision = None
+
     with db.connect(readonly=True) as conn:
         if body.text:
             subject = body.text.strip()
@@ -73,65 +141,94 @@ def summarize(body: SummarizeRequest) -> dict:
                                (body.document_id,)).fetchone()
             if doc is None:
                 raise HTTPException(404, f"No document with id {body.document_id!r}.")
-            sections = [r[0] for r in conn.execute(
-                """SELECT section FROM chunks WHERE document_id = ? AND chunk_kind='body'
-                       AND section IS NOT NULL GROUP BY section
-                     ORDER BY COUNT(*) DESC LIMIT 6""", (body.document_id,))]
-            query = f"{doc['title']} {' '.join(sections)}"[:400]
             title = doc["title"]
+            query = title
+            scoped_evidence = _document_passages(conn, body.document_id, body.max_evidence)
 
-        result = pipeline.search(conn, query, evidence_k=body.max_evidence, apply_gate=True)
-
-    if result.decision is None or not result.decision.passed:
-        return {
-            "ok": False, "grounded": False, "subject": title,
-            "summary": gate.REFUSAL, "bullets": [], "evidence": [],
-            "gate": result.decision.as_dict() if result.decision else {},
-            "provider": "none",
-        }
+        if scoped_evidence is None:
+            result = pipeline.search(conn, query, evidence_k=body.max_evidence, apply_gate=True)
+            decision = result.decision
+            evidence = result.evidence
+            retrieval_ms = round(result.timings.total_ms, 1)
+            if decision is None or not decision.passed:
+                return {
+                    "ok": False, "grounded": False, "subject": title,
+                    "summary": gate.REFUSAL, "bullets": [], "evidence": [],
+                    "gate": decision.as_dict() if decision else {},
+                    "provider": "none",
+                }
+        else:
+            evidence = scoped_evidence
+            retrieval_ms = 0.0
+            if not evidence:
+                # The document holds no substantial body text - say so
+                # plainly rather than returning an empty summary.
+                return {
+                    "ok": False, "grounded": False, "subject": title,
+                    "summary": "This document has no transcribed body text to summarise.",
+                    "bullets": [], "evidence": [],
+                    "gate": {}, "provider": "none",
+                }
 
     provider = get_provider()
-    generation = provider.generate(f"{SUMMARY_INSTRUCTION}\n\nSubject: {title}", result.evidence)
+    supplied = evidence[:provider.evidence_max()]
+    generation = provider.generate(f"{SUMMARY_INSTRUCTION}\n\nSubject: {title}", evidence)
 
-    supplied_max = 3
-    try:
-        from ...llm.qwen import EVIDENCE_MAX
-        supplied_max = EVIDENCE_MAX
-    except Exception:
-        pass
-    supplied = result.evidence[:supplied_max]
+    gate_dict = decision.as_dict() if decision is not None else {}
 
     degraded = None
-    if generation.ok and not generation.insufficient:
+    if generation.ok and not generation.insufficient and provider.is_generative():
         report = cit.validate(generation.cited, supplied)
         if report.valid:
-            bullets = [b.strip(" -•\t") for b in generation.text.splitlines() if b.strip()]
+            bullets = [b.strip(" -" + chr(8226) + chr(9)) for b in generation.text.splitlines() if b.strip()]
             return {
                 "ok": True, "grounded": True, "subject": title,
                 "summary": generation.text,
                 "bullets": [b for b in bullets if b],
                 "evidence": cit.attach(supplied, report),
                 "citations": report.as_dict(),
-                "gate": result.decision.as_dict(),
+                "gate": gate_dict,
                 "provider": provider.name(),
-                "timings": {"retrieval_ms": round(result.timings.total_ms, 1)},
+                "timings": {"retrieval_ms": retrieval_ms},
             }
         degraded = f"citations rejected: {report.reason}"
     elif generation.insufficient:
         degraded = "model reported insufficient evidence"
+    elif not provider.is_generative():
+        degraded = "no language model is configured; summarised from the archive text itself"
     else:
         degraded = f"provider failed: {generation.error}"
 
-    # Extractive fallback: verbatim sentences, one bullet per passage.
-    fallback = get_fallback().generate(query, supplied)
+    # Extractive summary: one verbatim bullet per passage, each traceable to
+    # the page it came from. Nothing here is composed, so it is never
+    # reported as model-generated.
+    bullets, used = [], []
+    fb = get_fallback()
+    for ev in evidence:
+        out = fb.generate(query, [ev])
+        if out.ok and out.text.strip():
+            # One bullet per passage, so the [E1] marker carries no
+            # information the evidence list does not already show.
+            bullets.append(_MARKER.sub("", out.text).strip())
+            used.append(ev)
+
+    if not bullets:
+        return {
+            "ok": False, "grounded": False, "subject": title,
+            "summary": "No passage in this document could be quoted as a summary.",
+            "bullets": [], "evidence": [], "gate": gate_dict,
+            "provider": "extractive", "degraded": degraded,
+        }
+
     return {
         "ok": True, "grounded": False, "subject": title,
-        "summary": fallback.text if fallback.ok else gate.REFUSAL,
-        "bullets": [fallback.text] if fallback.ok else [],
-        "evidence": supplied,
-        "gate": result.decision.as_dict(),
+        "summary": " ".join(bullets),
+        "bullets": bullets,
+        "evidence": used,
+        "gate": gate_dict,
         "provider": "extractive",
         "degraded": degraded,
+        "timings": {"retrieval_ms": retrieval_ms},
     }
 
 

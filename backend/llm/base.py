@@ -5,11 +5,14 @@ part of the RAG path may import a concrete provider or know which model is
 active - that is what makes the model replaceable.
 
 Contract:
-    name()      -> a short identifier for the response payload
-    health()    -> is this provider usable right now, without generating
-    generate()  -> a grounded answer from supplied evidence, or a clean
-                   failure that the caller turns into the extractive
-                   fallback
+    name()          -> a short identifier for the response payload
+    health()        -> is this provider usable right now, without generating
+    evidence_max()  -> how many passages this provider is shown, so the
+                       citation validator judges [E3] against exactly what
+                       the model saw
+    generate()      -> a grounded answer from supplied evidence, or a clean
+                       failure that the caller turns into the extractive
+                       fallback
 
 A provider never raises for an operational problem (model down, timeout,
 bad response). It returns ok=False with a reason, because a visitor asking
@@ -46,6 +49,13 @@ class GenerationResult:
     timings: dict = field(default_factory=dict)
 
 
+#: Passages shown to a provider by default. Citation validation uses the
+#: provider's own value, so a model that is shown four passages is judged
+#: against four - the pipeline must never import a concrete provider to
+#: learn this.
+DEFAULT_EVIDENCE_MAX = 3
+
+
 class LLMProvider(ABC):
     @abstractmethod
     def name(self) -> str: ...
@@ -55,6 +65,32 @@ class LLMProvider(ABC):
 
     @abstractmethod
     def generate(self, question: str, evidence: list[dict]) -> GenerationResult: ...
+
+    def is_generative(self) -> bool:
+        """True when this provider actually composes prose.
+
+        The extractive provider returns sentences lifted verbatim, which is
+        a different kind of answer and must not be presented as a model's.
+        `grounded` in the API means "a model wrote it AND its citations
+        validated", so it is this flag - not merely a successful result -
+        that decides whether an answer may claim it.
+        """
+        return True
+
+    def evidence_max(self) -> int:
+        """How many passages this provider is given. Overridden by providers
+        with a different context budget."""
+        return DEFAULT_EVIDENCE_MAX
+
+    def warm_is_cheap(self) -> bool:
+        """True when warm() costs little enough to run during startup.
+
+        A provider that would pull gigabytes of weights into RAM says False
+        here, so the archive comes up fast and stays responsive; the point
+        of startup warm-up is to remove a small first-request cost, not to
+        trade the whole machine for it.
+        """
+        return True
 
     def warm(self) -> None:
         """Optional: pre-load weights so the first visitor question does

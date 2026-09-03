@@ -5,7 +5,10 @@ import StatusChip from "../components/ui/StatusChip.jsx";
 import AsyncState from "../components/ui/AsyncState.jsx";
 import { api } from "../lib/api/endpoints.js";
 import { useArchive } from "../lib/api/useArchive.js";
-import { FONT_DISPLAY, FONT_UI, GOLD, INKTEXT, INDIGO, CREAM } from "../lib/tokens.js";
+import {
+  pageTitle, itemTitle, eyebrow, meta, provenance, CARD_CLASS, CARD_PAD, clampLines,
+} from "../lib/type.js";
+import { FONT_UI, GOLD, INKTEXT, INDIGO, CREAM } from "../lib/tokens.js";
 
 /* ---------------------------------------------------------------------- *
  * Archive — a list of what the archive actually holds.
@@ -51,12 +54,12 @@ export default function ArchiveView({ t, openArticle }) {
   return (
     <main id="main-content" className="max-w-5xl mx-auto px-4 sm:px-6 pb-20">
       <div className="pt-12 pb-8 daic-reveal">
-        <p className="uppercase text-xs tracking-[0.25em] mb-3" style={{ fontFamily: FONT_UI, color: GOLD }}>
+        <p className="mb-3" style={{ ...eyebrow, color: GOLD }}>
           {t.searchTitle || "Browse the archive"}
         </p>
-        <h2 className="text-3xl md:text-4xl mb-6" style={{ fontFamily: FONT_DISPLAY, color: INKTEXT }}>
+        <h1 className="text-3xl md:text-4xl mb-6" style={pageTitle}>
           By theme, not by shelf
-        </h2>
+        </h1>
 
         {/* Search bar */}
         <div className="max-w-xl mb-6 flex items-center gap-2 bg-[#faf4e4] border border-[#c9b98c] rounded-full pl-4 pr-2 py-2 focus-within:border-[#b3862c] transition-colors">
@@ -158,28 +161,35 @@ export default function ArchiveView({ t, openArticle }) {
             <button
               key={it.id}
               onClick={() => openArticle(it.id)}
-              className={`daic-card daic-arrow-parent daic-reveal text-left rounded-lg border border-[#d8c79a] bg-[#faf4e4] p-5 flex flex-col gap-3 hover:border-[#b3862c] transition-colors daic-reveal-${Math.min(i + 1, 6)}`}
+              className={`${CARD_CLASS} ${CARD_PAD} daic-arrow-parent daic-reveal text-left flex flex-col gap-3 daic-reveal-${Math.min(i + 1, 6)}`}
             >
               <div className="flex items-start justify-between gap-2">
-                <div className="flex items-center gap-2" style={{ color: GOLD }}>
+                <div className="flex items-center gap-2 min-w-0" style={{ color: GOLD }}>
                   <TypeIcon type={it.docType} size={16} />
-                  <span className="text-[11px] uppercase tracking-wide" style={{ fontFamily: FONT_UI, color: "#8a7f63" }}>
+                  <span
+                    className="truncate"
+                    style={{ ...meta, textTransform: "uppercase", letterSpacing: "0.1em" }}
+                  >
                     {[it.docType, it.date].filter(Boolean).join(" · ")}
                   </span>
                 </div>
                 <StatusChip status={it.verificationStatus} />
               </div>
 
-              <h3 className="text-lg" style={{ fontFamily: FONT_DISPLAY, color: INKTEXT }}>{it.title}</h3>
+              {/* A document title is the archive's own words: serif, and
+                  clamped so a long one wraps without breaking the grid. */}
+              <h2 className="text-lg" style={{ ...itemTitle, ...clampLines(3) }}>
+                {it.title}
+              </h2>
 
               {/* Real catalogue metadata in place of an invented blurb. */}
-              <p className="text-xs" style={{ fontFamily: FONT_UI, color: "#6b6350" }}>
+              <p style={{ ...provenance, ...clampLines(2) }}>
                 {[it.author, it.volume, it.publisher].filter(Boolean).join(" · ")}
               </p>
 
               <span
-                className="text-[11px] inline-flex items-center gap-1 mt-auto"
-                style={{ fontFamily: FONT_UI, color: INDIGO }}
+                className="inline-flex items-center gap-1 mt-auto"
+                style={{ ...meta, color: INDIGO, fontWeight: 600 }}
               >
                 <ShieldCheck size={11} aria-hidden="true" />
                 {it.chunks != null ? `${it.chunks} sourced passages` : "Passages not yet indexed"}

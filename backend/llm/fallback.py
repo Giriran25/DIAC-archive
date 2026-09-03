@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import re
 
+from ..retrieval.prose import reads_as_prose
 from .base import GenerationResult, LLMProvider, ProviderHealth
 
 _SENT = re.compile(r"([.!?][\"')\]]?)\s+")
@@ -64,6 +65,10 @@ class ExtractiveProvider(LLMProvider):
     def name(self) -> str:
         return "extractive"
 
+    def is_generative(self) -> bool:
+        # Nothing is composed here; every word is the archive's own.
+        return False
+
     def health(self) -> ProviderHealth:
         return ProviderHealth(True, "always available (no model)", None, True)
 
@@ -74,9 +79,34 @@ class ExtractiveProvider(LLMProvider):
         terms = {w.lower() for w in _WORD.findall(question or "")
                  if len(w) > 2 and w.lower() not in _STOP}
 
+        # Retrieval can surface a back-matter volume list or a title page:
+        # lexically those match almost any question about a work by name, and
+        # quoting one answered "what did Ambedkar say about the annihilation
+        # of caste" with a list of book titles.
+        #
+        # They stay in the index and stay readable at their page - they are
+        # simply not quotable. If NOTHING retrieved is prose there is no
+        # honest answer to give from it, and saying so is better than
+        # reciting a contents page.
+        # Citation validation judges the answer against the first
+        # evidence_max() passages - the window a generative provider is shown.
+        # The extractive provider must cite inside that same window, or a
+        # perfectly correct quotation is rejected for carrying a marker like
+        # [E4] that the validator cannot resolve.
+        window = evidence[:self.evidence_max()]
+        ordered = [ev for ev in window if reads_as_prose(ev.get("quote", ""))]
+        if not ordered:
+            return GenerationResult(
+                False, error="retrieved passages are front or back matter, not prose",
+                model="extractive")
+
         parts: list[str] = []
         cited: list[int] = []
-        for idx, ev in enumerate(evidence[:2], start=1):
+        for ev in ordered[:2]:
+            # The marker must index the passage's position in the list the
+            # caller supplied, or citation validation will reject a correct
+            # answer for pointing at the wrong number.
+            idx = window.index(ev) + 1
             sentences = [s for s in _sentences(ev.get("quote", "")) if _is_prose(s)]
             if not sentences:
                 continue

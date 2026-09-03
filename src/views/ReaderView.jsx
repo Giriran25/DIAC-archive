@@ -13,10 +13,8 @@ import { splitSentences } from "../lib/retrieval.js";
 import { api } from "../lib/api/endpoints.js";
 import { ApiError } from "../lib/api/client.js";
 import { useArchive } from "../lib/api/useArchive.js";
-import {
-  FONT_DISPLAY, FONT_BODY, FONT_UI,
-  GOLD, INKTEXT, INDIGO,
-} from "../lib/tokens.js";
+import { pageTitle, itemTitle, archivalBody, meta, provenance } from "../lib/type.js";
+import { FONT_BODY, FONT_UI, GOLD, INDIGO } from "../lib/tokens.js";
 
 /* ---------------------------------------------------------------------- *
  * ReaderView — a primary source, read from the archive.
@@ -129,10 +127,10 @@ export default function ReaderView({ documentId, lang, t, reader, openArticle, b
                 <TypeIcon type={doc.docType} size={11} /> {doc.docType}
               </span>
               {doc.date && (
-                <span className="text-xs" style={{ fontFamily: FONT_UI, color: "#8a7f63" }}>{doc.date}</span>
+                <span style={meta}>{doc.date}</span>
               )}
               {doc.volume && (
-                <span className="text-xs" style={{ fontFamily: FONT_UI, color: "#8a7f63" }}>· {doc.volume}</span>
+                <span style={meta}>· {doc.volume}</span>
               )}
               <StatusChip status={doc.verificationStatus} />
             </div>
@@ -140,8 +138,7 @@ export default function ReaderView({ documentId, lang, t, reader, openArticle, b
             <h1
               className={`text-3xl md:text-4xl mb-3 transition-colors ${active && reader.sentenceIndex === 0 ? "rounded px-1 -mx-1" : ""}`}
               style={{
-                fontFamily: FONT_DISPLAY,
-                color: INKTEXT,
+                ...pageTitle,
                 backgroundColor: active && reader.sentenceIndex === 0 ? "#f6e3b4" : "transparent",
               }}
             >
@@ -150,7 +147,7 @@ export default function ReaderView({ documentId, lang, t, reader, openArticle, b
 
             {/* Real catalogue metadata, in place of an editorial summary the
                 archive does not hold. */}
-            <p className="text-sm mb-5" style={{ fontFamily: FONT_UI, color: "#6b6350" }}>
+            <p className="mb-5" style={{ ...provenance, fontSize: "12px" }}>
               {[doc.author, doc.publisher, doc.source].filter(Boolean).join(" · ")}
               {totals.chunks != null ? ` · ${totals.chunks} indexed passages` : ""}
             </p>
@@ -207,7 +204,7 @@ export default function ReaderView({ documentId, lang, t, reader, openArticle, b
                 <div className="flex items-center justify-between border-b border-[#e6d9b3] pb-3 gap-3 flex-wrap">
                   <div className="flex items-center gap-2 flex-wrap">
                     <Sparkles size={16} color={GOLD} aria-hidden="true" />
-                    <h3 className="text-base font-bold text-[#141c30]" style={{ fontFamily: FONT_DISPLAY }}>
+                    <h3 className="text-base" style={itemTitle}>
                       {t.summaryOf || "Archival Summary"}
                     </h3>
                     {/* A summary no model wrote, or whose citations failed to
@@ -270,7 +267,7 @@ export default function ReaderView({ documentId, lang, t, reader, openArticle, b
               <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Translate document">
                 <div className="bg-[#faf4e4] border border-[#d8c79a] rounded-2xl max-w-md w-full p-6 shadow-2xl daic-reveal space-y-4">
                   <div className="flex items-center justify-between border-b border-[#d8c79a] pb-3">
-                    <h3 className="text-lg font-bold text-[#141c30]" style={{ fontFamily: FONT_DISPLAY }}>
+                    <h3 className="text-lg" style={itemTitle}>
                       {t.translateDoc || "Translate Document"}
                     </h3>
                     <button
@@ -382,7 +379,7 @@ export default function ReaderView({ documentId, lang, t, reader, openArticle, b
                   {pageText.split("\n\n").filter(Boolean).map((para, pi) => {
                     const parts = splitSentences(para);
                     return (
-                      <p key={pi} className="text-base md:text-lg mb-5 leading-relaxed" style={{ fontFamily: FONT_BODY, color: "#332d20" }}>
+                      <p key={pi} className="text-base md:text-lg mb-5" style={{ ...archivalBody, color: "#332d20" }}>
                         {parts.map((s, si) => {
                           const idx = cursor++;
                           const lit = active && reader.sentenceIndex === idx;
@@ -409,7 +406,7 @@ export default function ReaderView({ documentId, lang, t, reader, openArticle, b
               <section aria-label="Evidence">
                 <div className="flex items-center gap-2 mb-2">
                   <ShieldCheck size={16} color={GOLD} aria-hidden="true" />
-                  <h2 className="text-xl" style={{ fontFamily: FONT_DISPLAY, color: INKTEXT }}>{t.evidence}</h2>
+                  <h2 className="text-xl" style={itemTitle}>{t.evidence}</h2>
                   <span
                     className="text-[10px] px-2 py-0.5 rounded-full font-bold"
                     style={{ backgroundColor: "#efe0bb", color: "#5a4420", fontFamily: FONT_UI }}

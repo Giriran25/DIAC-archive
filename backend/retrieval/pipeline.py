@@ -25,6 +25,7 @@ from dataclasses import dataclass, field
 from ..app.core import config
 from . import fusion, gate, lexical, vector
 from . import embedder as emb
+from . import prose
 from . import rerank as rr
 from .evidence import to_evidence
 
@@ -113,6 +114,12 @@ def _extractive_answer(question: str, rows: dict, hits: list) -> str:
         row = rows.get(hit.chunk_id)
         if row is None:
             continue
+        # A title page or a back-matter volume list is real archive content
+        # and stays searchable and readable, but it is not something to quote
+        # back as an answer. It stays in the evidence beneath; it just does
+        # not become the sentence a visitor reads.
+        if not prose.reads_as_prose(row["text"]):
+            continue
         sentences = [s for s in _sentences(row["text"]) if _is_prose(s)]
         if not sentences:
             continue
@@ -190,6 +197,14 @@ def search(
     t0 = time.perf_counter()
     rows = lexical.hydrate(conn, [f.chunk_id for f in fused])
     t.hydrate_ms = (time.perf_counter() - t0) * 1000
+
+    # Only body text is evidence. Lexical search already enforces this, and
+    # the vector index is built from body chunks only - but a chunk
+    # reclassified after the index was built still has its vector, so the
+    # rule is enforced here too. Without this a dense hit could return a
+    # table of contents that lexical search would have refused.
+    fused = [f for f in fused
+             if f.chunk_id in rows and rows[f.chunk_id]["chunk_kind"] == "body"] or fused
 
     # --- rerank ------------------------------------------------------
     # Whichever ranker produces the final order also produces the score
@@ -321,9 +336,22 @@ def answer(
     # 1. provider failed outright
     if not gen.ok:
         result.degraded = f"provider failed: {gen.error}"
-        result.answer = extractive_answer or _fallback_text(llm, question, result)
+        fallback_answer = extractive_answer or _fallback_text(llm, question, result)
         result.grounded = False
         result.fallback = True
+        if not fallback_answer or fallback_answer == gate.REFUSAL:
+            # Nothing in the retrieved set could honestly be quoted. Reciting
+            # a contents page instead would be worse than saying so, and the
+            # evidence is withheld for the same reason a gate refusal
+            # withholds it.
+            result.answer = gate.REFUSAL
+            result.evidence = []
+            result.decision = gate.GateDecision(
+                False, "no quotable passage in the retrieved sources", gate.REFUSAL,
+                result.decision.relevance, result.decision.coverage,
+                result.decision.provenance_ok, result.decision.checks)
+        else:
+            result.answer = fallback_answer
         return result
 
     # 2. the model itself judged the evidence too thin. It is closer to the
@@ -343,8 +371,10 @@ def answer(
     # 3. citation validation, against exactly the passages the model was
     #    shown - not the full retrieved set, or [E3] would be judged
     #    against evidence the model never saw.
-    from ..llm.qwen import EVIDENCE_MAX
-    supplied = result.evidence[:EVIDENCE_MAX]
+    # How many passages the provider was shown is the provider's own
+    # business; importing a concrete one here would tie the pipeline to a
+    # single model, which is the coupling the interface exists to prevent.
+    supplied = result.evidence[:llm.evidence_max()]
     report = cit.validate(gen.cited, supplied)
     result.citations = report.as_dict()
     if not report.valid:
@@ -354,11 +384,18 @@ def answer(
         result.fallback = True
         return result
 
-    # 4. accepted - show only the passages the answer actually rests on
+    # 4. accepted - show only the passages the answer actually rests on.
+    #    `grounded` means a MODEL wrote this and its citations validated. The
+    #    extractive provider succeeds here too, but it composed nothing: its
+    #    words are the archive's own, so it reports as a degraded (evidence-
+    #    derived) answer rather than borrowing the word for a model's.
     result.answer = gen.text
     result.evidence = cit.attach(supplied, report)
-    result.grounded = True
-    result.fallback = False
+    generative = llm.is_generative()
+    result.grounded = generative
+    result.fallback = not generative
+    if not generative:
+        result.degraded = "answered from the archive text itself; no language model is configured"
     return result
 
 
@@ -391,9 +428,11 @@ def warm() -> dict:
         out["index"] = True
         out["vectors"] = idx.size
 
-    # The LLM loads in the background: on this laptop a cold load takes
-    # minutes, and lexical search plus the extractive path are fully
-    # usable meanwhile, so startup must not block on it.
+    # The generator is reported but NOT loaded. A provider whose warm-up
+    # would pull gigabytes of weights into RAM says warm_is_cheap() is
+    # False, and startup leaves it alone: the archive must come up fast and
+    # stay responsive, and retrieval plus the extractive answer are fully
+    # usable with no model at all.
     try:
         from ..llm import get_provider
         provider = get_provider()
@@ -402,7 +441,7 @@ def warm() -> dict:
         out["llm_available"] = health.available
         out["llm_loaded"] = health.loaded
         out["llm_detail"] = health.detail
-        if health.available and not health.loaded:
+        if health.available and not health.loaded and provider.warm_is_cheap():
             provider.warm()
     except Exception as exc:
         out["llm_error"] = str(exc)

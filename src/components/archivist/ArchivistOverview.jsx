@@ -69,7 +69,21 @@ export default function ArchivistOverview({ setSub }) {
     },
   ];
 
-  if (loading) return <LoadingState label="Reading the archive's own counts…" />;
+  if (loading) {
+    return (
+      <div className="space-y-6 daic-reveal" aria-busy="true">
+        <LoadingState label="Reading the archive's own counts…" />
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4" aria-label="Archive metrics">
+          {metrics.map((metric) => (
+            <div key={metric.label} className="rounded-xl border border-[#d8c79a] bg-[#faf4e4] p-5">
+              <div className="text-2xl font-bold mb-1" style={{ fontFamily: FONT_DISPLAY, color: INKTEXT }}>—</div>
+              <div className="text-xs font-semibold" style={{ fontFamily: FONT_UI, color: INKTEXT }}>{metric.label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8 daic-reveal">

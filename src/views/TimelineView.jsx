@@ -5,7 +5,9 @@ import AsyncState from "../components/ui/AsyncState.jsx";
 import { splitSentences } from "../lib/retrieval.js";
 import { api } from "../lib/api/endpoints.js";
 import { useArchive } from "../lib/api/useArchive.js";
-import { FONT_DISPLAY, FONT_BODY, FONT_UI, GOLD, INKTEXT, PARCH } from "../lib/tokens.js";
+import { eventHeading } from "../lib/text.js";
+import { pageTitle, archivalBody, eyebrow, meta, provenance } from "../lib/type.js";
+import { FONT_UI, GOLD, INKTEXT } from "../lib/tokens.js";
 
 /* ---------------------------------------------------------------------- *
  * TimelineView — dated events, each answerable to the passages under it.
@@ -14,6 +16,13 @@ import { FONT_DISPLAY, FONT_BODY, FONT_UI, GOLD, INKTEXT, PARCH } from "../lib/t
  * the chronology could drift from the archive without anyone noticing. Events
  * now come from the archive, and opening one shows the passages it rests on,
  * with volume and printed page — so a date on this page can be checked.
+ *
+ * The events are plate captions, and some of them are OCR fragments: "Dr",
+ * "V", "R O L L -C A L L O P T H E". Set at heading size those took over the
+ * page and told a reader nothing. The hierarchy is therefore DATE first,
+ * then the caption at reading size, then context, then source — and a
+ * caption that cannot carry a heading is not made to. No caption text is
+ * altered; only its role on the page changes.
  * ---------------------------------------------------------------------- */
 
 export default function TimelineView({ t, reader, lang, openArticle }) {
@@ -34,24 +43,25 @@ export default function TimelineView({ t, reader, lang, openArticle }) {
 
   const entry = detail?.event ?? null;
   const sources = detail?.sources ?? [];
+  const { heading, caption, captionIsPrimary } = eventHeading(entry || {});
 
   const sentences = useMemo(
-    () => (entry ? [entry.title, ...splitSentences(entry.detail || entry.summary || "")] : []),
-    [entry]
+    () => (entry ? [heading, ...splitSentences(entry.detail || entry.summary || "")] : []),
+    [entry, heading]
   );
 
   return (
     <main id="main-content" className="max-w-5xl mx-auto px-4 sm:px-6 pb-20">
       <div className="pt-12 pb-8 text-center daic-reveal">
-        <p className="uppercase text-xs tracking-[0.25em] mb-3" style={{ fontFamily: FONT_UI, color: GOLD }}>
+        <p className="mb-3" style={{ ...eyebrow, color: GOLD }}>
           Interactive timeline
         </p>
-        <h2 className="text-3xl md:text-4xl" style={{ fontFamily: FONT_DISPLAY, color: INKTEXT }}>
+        <h1 className="text-3xl md:text-4xl" style={pageTitle}>
           A life read across formats
-        </h2>
-        <p className="max-w-xl mx-auto text-sm text-[#6b6350] mt-2" style={{ fontFamily: FONT_UI }}>
-          Milestones, declarations and speeches, each shown with the archival
-          passages that record it.
+        </h1>
+        <p className="max-w-xl mx-auto mt-3 text-sm" style={{ ...provenance, color: "#6b6350" }}>
+          Milestones, declarations and photographic plates, each shown with the
+          archival passages that record it.
         </p>
       </div>
 
@@ -67,50 +77,36 @@ export default function TimelineView({ t, reader, lang, openArticle }) {
         }}
       >
         <>
-          {/* Timeline track */}
-          <div className="relative mb-12 overflow-x-auto" aria-label="Interactive timeline track">
-            <div className="min-w-[620px] px-4">
-              <div className="absolute left-4 right-4 top-5 h-px" style={{ backgroundColor: "#c9b98c" }} />
-              <div className="flex justify-between relative">
-                {events.map((e) => {
-                  const isSelected = e.id === currentId;
-                  return (
-                    <button
-                      key={e.id}
-                      onClick={() => setActiveId(e.id)}
-                      className="flex flex-col items-center gap-2 group transition-all duration-200"
-                      style={{ width: `${100 / events.length}%` }}
-                      aria-label={`${e.year} — ${e.title}`}
-                      aria-current={isSelected ? "true" : undefined}
-                    >
-                      <span
-                        className={`w-4 h-4 rounded-full border-2 daic-dot z-10 transition-all duration-200 ${
-                          isSelected
-                            ? "daic-dot-active ring-4 ring-[#b3862c]/30 scale-125"
-                            : "group-hover:scale-110 group-hover:border-[#b3862c]"
-                        }`}
-                        style={{
-                          backgroundColor: isSelected ? GOLD : PARCH,
-                          borderColor: isSelected ? GOLD : "#c9b98c",
-                        }}
-                      />
-                      <span
-                        className={`text-[11px] text-center leading-tight transition-colors ${
-                          isSelected ? "font-bold text-[#141c30]" : "text-[#8a7f63] group-hover:text-[#141c30]"
-                        }`}
-                        style={{ fontFamily: FONT_UI }}
-                      >
-                        {e.year}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
+          {/* ---- The track ------------------------------------------------
+              Scrolls inside itself on narrow screens so the page never
+              scrolls sideways; the rail and the nodes share one grid so the
+              dots always sit on the line. */}
+          <div className="daic-timeline mb-10" aria-label="Timeline of events">
+            <div className="daic-timeline-track">
+              <span className="daic-timeline-rail" aria-hidden="true" />
+              {events.map((e) => {
+                const isSelected = e.id === currentId;
+                const label = `${e.year}${e.title ? ` — ${e.title}` : ""}`;
+                return (
+                  <button
+                    key={e.id}
+                    onClick={() => setActiveId(e.id)}
+                    className={`daic-timeline-node${isSelected ? " is-selected" : ""}`}
+                    aria-label={label}
+                    aria-current={isSelected ? "true" : undefined}
+                  >
+                    <span className="daic-timeline-dot" aria-hidden="true" />
+                    <span className="daic-timeline-year" style={{ fontFamily: FONT_UI }}>
+                      {e.year}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          {/* Active entry */}
-          <div className="daic-reveal rounded-xl border border-[#d8c79a] bg-[#faf4e4] p-7 md:p-9 shadow-sm" key={currentId}>
+          {/* ---- The selected event -------------------------------------- */}
+          <div className="daic-reveal rounded-xl border border-[#d8c79a] bg-[#faf4e4] p-6 md:p-8 shadow-sm" key={currentId}>
             <AsyncState
               loading={detailLoading}
               error={detailError}
@@ -119,18 +115,22 @@ export default function TimelineView({ t, reader, lang, openArticle }) {
             >
               {entry && (
                 <>
-                  <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+                  {/* DATE and context first */}
+                  <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
                     <div className="flex items-center gap-2 flex-wrap">
                       {entry.category && (
-                        <span className="text-xs px-2.5 py-1 rounded-full font-semibold" style={{ backgroundColor: "#efe0bb", color: "#5a4420", fontFamily: FONT_UI }}>
-                          <Tag size={10} className="inline mr-1" aria-hidden="true" /> {entry.category}
+                        <span
+                          className="px-2.5 py-1 rounded-full inline-flex items-center gap-1"
+                          style={{ ...meta, backgroundColor: "#efe0bb", color: "#5a4420", fontWeight: 600 }}
+                        >
+                          <Tag size={10} aria-hidden="true" /> {entry.category}
                         </span>
                       )}
-                      <span className="text-xs font-semibold" style={{ fontFamily: FONT_UI, color: "#8a7f63" }}>
-                        {entry.date || entry.year}
-                      </span>
+                      {!captionIsPrimary && (
+                        <span style={{ ...meta, fontWeight: 600 }}>{entry.date || entry.year}</span>
+                      )}
                       {entry.location && (
-                        <span className="text-xs inline-flex items-center gap-1 text-[#6b6350]" style={{ fontFamily: FONT_UI }}>
+                        <span className="inline-flex items-center gap-1" style={meta}>
                           <MapPin size={11} color={GOLD} aria-hidden="true" /> {entry.location}
                         </span>
                       )}
@@ -138,48 +138,57 @@ export default function TimelineView({ t, reader, lang, openArticle }) {
                     <ListenControls id={`tl:${entry.id}`} sentences={sentences} lang={lang} reader={reader} t={t} compact />
                   </div>
 
-                  <h3 className="text-2xl md:text-3xl mb-3 font-bold" style={{ fontFamily: FONT_DISPLAY, color: INKTEXT }}>
-                    {entry.title}
-                  </h3>
-                  <p className="text-base md:text-lg mb-6 max-w-2xl leading-relaxed" style={{ fontFamily: FONT_BODY, color: "#4a4330" }}>
-                    {entry.detail || entry.summary}
-                  </p>
+                  {/* EVENT TITLE — the year leads when the caption cannot */}
+                  <h2 className="text-2xl md:text-3xl mb-3" style={pageTitle}>
+                    {heading}
+                  </h2>
 
-                  {/* The passages the event rests on. Without these the date is
-                      just an assertion; with them it is a citation. */}
+                  {caption && (
+                    <p className="mb-3 text-base" style={archivalBody}>
+                      <span style={{ ...meta, marginRight: "0.4em" }}>Plate caption:</span>
+                      {caption}
+                    </p>
+                  )}
+
+                  {/* CONTEXT */}
+                  {!captionIsPrimary && (entry.detail || entry.summary) && (
+                    <p className="text-base md:text-lg mb-6 max-w-2xl" style={archivalBody}>
+                      {entry.detail || entry.summary}
+                    </p>
+                  )}
+
+                  {/* SOURCE */}
                   {sources.length > 0 ? (
                     <div className="pt-5 border-t border-[#d8c79a]">
-                      <h4 className="text-xs uppercase font-bold tracking-wider text-[#5a4420] mb-3" style={{ fontFamily: FONT_UI }}>
+                      <h3 className="mb-3" style={{ ...eyebrow, color: "#5a4420", letterSpacing: "0.18em" }}>
                         Archival sources ({sources.length})
-                      </h4>
+                      </h3>
                       <div className="space-y-2.5">
                         {sources.map((s) => (
                           <button
                             key={s.uid}
                             onClick={() => openArticle?.(s.documentId)}
-                            className="daic-card daic-arrow-parent w-full text-left p-4 rounded-lg border border-[#d8c79a] bg-white hover:border-[#b3862c]"
+                            className="daic-card daic-arrow-parent w-full min-w-0 text-left p-4 rounded-lg border border-[#d8c79a] bg-white hover:border-[#b3862c]"
                           >
-                            <div className="flex items-center gap-2 mb-1.5 flex-wrap text-[11px]" style={{ fontFamily: FONT_UI, color: "#8a7f63" }}>
+                            <div className="flex items-center gap-2 mb-1.5 flex-wrap" style={provenance}>
                               <Quote size={11} color={GOLD} aria-hidden="true" />
                               <span className="font-semibold text-[#5a4420]">{s.documentTitle}</span>
                               {s.volume && <span>· {s.volume}</span>}
                               {s.page != null && <span>· p. {s.page}</span>}
                               <ChevronRight size={11} className="daic-arrow ml-auto" aria-hidden="true" />
                             </div>
-                            <p className="text-sm italic" style={{ fontFamily: FONT_BODY, color: INKTEXT }}>
+                            <p className="text-sm italic" style={{ ...archivalBody, color: INKTEXT }}>
                               {s.excerpt}
                             </p>
                             {s.note && (
-                              <p className="mt-1.5 text-[11px]" style={{ fontFamily: FONT_UI, color: "#6f6549" }}>
-                                {s.note}
-                              </p>
+                              <p className="mt-1.5" style={provenance}>{s.note}</p>
                             )}
                           </button>
                         ))}
                       </div>
                     </div>
                   ) : (
-                    <p className="pt-5 border-t border-[#d8c79a] text-xs" style={{ fontFamily: FONT_UI, color: "#8a7f63" }}>
+                    <p className="pt-5 border-t border-[#d8c79a]" style={provenance}>
                       No archival passage has been linked to this event yet.
                     </p>
                   )}
