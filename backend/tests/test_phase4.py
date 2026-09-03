@@ -357,6 +357,61 @@ def test_master_video_is_registered_but_not_servable(client):
 
 
 @needs_archive
+def test_a_short_playable_video_excerpt_is_available(client):
+    """The demonstration needs a video that actually plays.
+
+    The master is 62 MB per minute and is deliberately refused, so a
+    compressed excerpt stands in for it. It must be short enough to stream
+    over the demonstration Wi-Fi and must declare its duration, or the
+    player shows a control with nothing behind it.
+    """
+    items = client.get("/api/media").json()["media"]
+    playable = [m for m in items
+                if m["type"] == "video" and m["servable"] and m["streamUrl"]]
+    if not playable:
+        pytest.skip("no playable video registered")
+
+    excerpt = next((m for m in playable if "excerpt" in m["id"]), None)
+    if excerpt is None:
+        pytest.skip("no excerpt registered")
+
+    assert excerpt["durationMs"], "excerpt must declare its own duration"
+    assert 120_000 <= excerpt["durationMs"] <= 420_000, (
+        "the excerpt should be a few minutes, not the whole documentary")
+    # Small enough that opening the page does not saturate the shared link.
+    assert excerpt["byteSize"] < 80 * 1024 * 1024
+
+
+@needs_archive
+def test_excerpt_is_range_served_and_names_its_master(client):
+    """Seeking needs byte ranges, and an excerpt must never be mistaken for
+    the complete work: its provenance names the file it was cut from."""
+    items = client.get("/api/media").json()["media"]
+    excerpt = next((m for m in items if "excerpt" in m["id"] and m["servable"]), None)
+    if excerpt is None:
+        pytest.skip("no excerpt registered")
+
+    head = client.get(f"/api/media/{excerpt['id']}/stream",
+                      headers={"Range": "bytes=0-1023"})
+    assert head.status_code == 206
+    assert head.headers["accept-ranges"] == "bytes"
+    assert head.headers["content-range"].startswith("bytes 0-1023/")
+
+    # A seek lands mid-file, which is the request the player makes when the
+    # viewer drags the scrubber.
+    total = int(head.headers["content-range"].split("/")[1])
+    mid = total // 2
+    seek = client.get(f"/api/media/{excerpt['id']}/stream",
+                      headers={"Range": f"bytes={mid}-{mid + 1023}"})
+    assert seek.status_code == 206
+    assert seek.headers["content-range"].startswith(f"bytes {mid}-")
+
+    detail = client.get(f"/api/media/{excerpt['id']}").json()["media"]
+    assert "BabasahebAmbedkar_Eng.mp4" in (detail["provenance"] or ""), (
+        "the excerpt must name the master it was derived from")
+
+
+@needs_archive
 def test_transcript_absence_is_stated_not_faked(client):
     body = client.get("/api/media").json()
     if not body["count"]:

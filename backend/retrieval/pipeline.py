@@ -212,7 +212,12 @@ def search(
     t0 = time.perf_counter()
     if use_reranker:
         texts = {cid: row["text"] for cid, row in rows.items()}
-        top = rr.get_reranker().rerank(question, fused, texts, top_k=evidence_k)
+        # The gate's own floor is handed to the reranker so a query that
+        # would be refused gets its other phrasing scored before that is
+        # decided. See Reranker.rerank for why one form is not enough.
+        top = rr.get_reranker().rerank(
+            question, fused, texts, top_k=evidence_k,
+            second_chance_floor=gate.RELEVANCE_FLOOR if apply_gate else None)
         scorer = "rerank"
     else:
         top = [

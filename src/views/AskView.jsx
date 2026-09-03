@@ -7,7 +7,7 @@ import ListenControls from "../components/ui/ListenControls.jsx";
 import EvidenceCard from "../components/evidence/EvidenceCard.jsx";
 import ResponseBadge from "../components/ui/ResponseBadge.jsx";
 import LoadingSteps from "../components/ui/LoadingSteps.jsx";
-import { splitSentences } from "../lib/retrieval.js";
+import { splitSentences } from "../lib/sentences.js";
 import { api } from "../lib/api/endpoints.js";
 import { ApiError } from "../lib/api/client.js";
 import { readAnswer, ANSWER_STATE } from "../lib/api/askState.js";
@@ -100,7 +100,7 @@ export default function AskView({ lang, t, reader, seed, clearSeed, openArticle 
   const hasConversation = messages.length > 1 || thinking;
 
   return (
-    <main id="main-content" className="max-w-3xl mx-auto px-6 pb-10 flex flex-col" style={{ minHeight: "70vh" }}>
+    <main id="main-content" className="max-w-3xl mx-auto px-4 sm:px-6 pb-10 flex flex-col" style={{ minHeight: "70vh" }}>
       <div className="flex items-center justify-between py-6 gap-3 flex-wrap">
         <div className="flex items-center gap-2">
           <ChakraMark size={22} spinning={thinking} />

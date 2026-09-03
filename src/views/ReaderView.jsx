@@ -9,7 +9,7 @@ import StatusChip from "../components/ui/StatusChip.jsx";
 import ListenControls from "../components/ui/ListenControls.jsx";
 import EvidenceCard from "../components/evidence/EvidenceCard.jsx";
 import AsyncState from "../components/ui/AsyncState.jsx";
-import { splitSentences } from "../lib/retrieval.js";
+import { splitSentences } from "../lib/sentences.js";
 import { api } from "../lib/api/endpoints.js";
 import { ApiError } from "../lib/api/client.js";
 import { useArchive } from "../lib/api/useArchive.js";

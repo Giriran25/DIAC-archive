@@ -1,7 +1,7 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import {
   Network, ArrowRight, BookOpen, Scale,
-  Milestone, Sparkles, ScrollText, ChevronRight, Quote,
+  Milestone, Sparkles, ChevronRight, Quote, Search, X, Users, MapPin,
 } from "lucide-react";
 import AsyncState from "../ui/AsyncState.jsx";
 import { api } from "../../lib/api/endpoints.js";
@@ -22,22 +22,92 @@ import {
  * ---------------------------------------------------------------------- */
 
 const KIND_ICONS = {
-  person: <ScrollText size={13} />,
-  place: <Milestone size={13} />,
+  person: <Users size={13} />,
+  place: <MapPin size={13} />,
   organisation: <Scale size={13} />,
   work: <BookOpen size={13} />,
   concept: <Sparkles size={13} />,
+  theme: <Sparkles size={13} />,
   event: <Milestone size={13} />,
 };
 
+/* ---------------------------------------------------------------------- *
+ * Categories
+ *
+ * These are the archive's OWN entity kinds, relabelled for a reader - not
+ * a scheme invented here. The extractor records person, place, work, theme
+ * and event, and grouping by anything else would be asserting a
+ * classification of history that nobody made.
+ *
+ * The grouping exists because 121 of the 140 entities are `work`: every
+ * section and chapter across the volumes. Rendered as one flat list that
+ * is a wall of 140 chips, which is what this page used to be. An entity
+ * whose kind is not one of these falls into "Other" rather than being
+ * forced into a category it does not belong to.
+ * ---------------------------------------------------------------------- */
+const CATEGORIES = [
+  { id: "theme", label: "Themes & Ideas", kinds: ["theme", "concept"] },
+  { id: "work", label: "Writings & Works", kinds: ["work"] },
+  { id: "person", label: "People", kinds: ["person", "organisation"] },
+  { id: "place", label: "Places", kinds: ["place"] },
+  { id: "event", label: "Events", kinds: ["event"] },
+];
+
+const OTHER = { id: "other", label: "Other", kinds: [] };
+
+/** How many entities a category shows before "show more". */
+const PAGE = 12;
+
+function categoryOf(kind) {
+  return CATEGORIES.find((c) => c.kinds.includes(kind))?.id ?? OTHER.id;
+}
+
 export default function KnowledgeMap({ t, openArticle }) {
   const [selectedId, setSelectedId] = useState(null);
+  const [category, setCategory] = useState("theme");
+  const [query, setQuery] = useState("");
+  const [shown, setShown] = useState(PAGE);
 
   const listFetcher = useCallback((signal) => api.entities(undefined, { signal }), []);
   const { data: list, loading, error, retry } = useArchive(listFetcher, []);
 
-  const entities = list?.entities ?? [];
-  const activeId = selectedId ?? entities[0]?.id ?? null;
+  const entities = useMemo(() => list?.entities ?? [], [list]);
+
+  /* Categories are only offered when the archive actually has entities in
+     them, so the page never shows a tab that leads to an empty shelf. */
+  const groups = useMemo(() => {
+    const counts = {};
+    for (const e of entities) {
+      const id = categoryOf(e.kind);
+      counts[id] = (counts[id] || 0) + 1;
+    }
+    return [...CATEGORIES, OTHER]
+      .filter((c) => counts[c.id])
+      .map((c) => ({ ...c, count: counts[c.id] }));
+  }, [entities]);
+
+  const activeCategory = groups.some((g) => g.id === category)
+    ? category
+    : groups[0]?.id ?? "theme";
+
+  /* Within a category, the most-referenced entities come first: "appears in
+     400 passages" is the archive's own measure of prominence, not an
+     editorial judgement about importance. */
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return entities
+      .filter((e) => categoryOf(e.kind) === activeCategory)
+      .filter((e) => !q || e.name.toLowerCase().includes(q))
+      .sort((a, b) => (b.links || 0) - (a.links || 0) || a.name.localeCompare(b.name));
+  }, [entities, activeCategory, query]);
+
+  const activeId = selectedId ?? visible[0]?.id ?? entities[0]?.id ?? null;
+
+  const selectCategory = (id) => {
+    setCategory(id);
+    setShown(PAGE);
+    setQuery("");
+  };
 
   const detailFetcher = useCallback(
     (signal) => (activeId == null
@@ -81,34 +151,102 @@ export default function KnowledgeMap({ t, openArticle }) {
             empty: "No entities have been extracted from the archive yet.",
           }}
         >
-          <div className="flex flex-wrap gap-2.5">
-            {entities.map((ent) => {
-              const isSelected = ent.id === activeId;
-              return (
+          <>
+            {/* Category tabs, built from the kinds the archive records */}
+            <div className="flex flex-wrap gap-2 mb-4" role="tablist" aria-label="Entity categories">
+              {groups.map((g) => {
+                const on = g.id === activeCategory;
+                return (
+                  <button
+                    key={g.id}
+                    role="tab"
+                    aria-selected={on}
+                    onClick={() => selectCategory(g.id)}
+                    className={`daic-chip px-3.5 py-2 rounded-full border text-xs transition-colors ${
+                      on
+                        ? "bg-[#1c2c4d] text-[#f4ead0] border-[#b3862c]"
+                        : "bg-[#faf4e4] border-[#c9b98c] text-[#5a4420] hover:border-[#b3862c]"
+                    }`}
+                    style={{ fontFamily: FONT_UI, fontWeight: 600 }}
+                  >
+                    {g.label}
+                    <span className={`ml-2 text-[10px] ${on ? "text-[#d9ac4f]" : "text-[#8a7f63]"}`}>
+                      {g.count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Filter within the category. "Writings & Works" holds 121
+                sections, which is a list to search rather than to scroll. */}
+            <div className="flex items-center gap-2 bg-white/60 border border-[#c9b98c] rounded-full pl-3 pr-2 py-1.5 mb-4 max-w-sm focus-within:border-[#b3862c] transition-colors">
+              <Search size={14} color={GOLD} aria-hidden="true" />
+              <input
+                value={query}
+                onChange={(e) => { setQuery(e.target.value); setShown(PAGE); }}
+                placeholder="Filter by name…"
+                aria-label="Filter entities by name"
+                className="flex-1 bg-transparent outline-none text-xs min-w-0"
+                style={{ fontFamily: FONT_UI, color: INKTEXT }}
+              />
+              {query && (
                 <button
-                  key={ent.id}
-                  onClick={() => setSelectedId(ent.id)}
-                  className={`daic-chip px-3.5 py-2 rounded-full border text-xs flex items-center gap-2 transition-all duration-200 ${
-                    isSelected
-                      ? "bg-[#1c2c4d] text-[#f4ead0] border-[#b3862c] shadow-md ring-2 ring-[#b3862c]/50"
-                      : "bg-[#faf4e4] border-[#c9b98c] text-[#5a4420] hover:border-[#b3862c]"
-                  }`}
-                  style={{ fontFamily: FONT_UI }}
-                  aria-pressed={isSelected}
+                  onClick={() => { setQuery(""); setShown(PAGE); }}
+                  aria-label="Clear filter"
+                  className="daic-chip w-5 h-5 rounded-full flex items-center justify-center"
+                  style={{ color: "#8a7f63" }}
                 >
-                  <span className={isSelected ? "text-[#d9ac4f]" : "text-[#b3862c]"} aria-hidden="true">
-                    {KIND_ICONS[ent.kind] || <Sparkles size={12} />}
-                  </span>
-                  <span className="font-medium">{ent.name}</span>
-                  <span className={`text-[9px] px-1.5 py-0.5 rounded-full uppercase ${
-                    isSelected ? "bg-white/20 text-white" : "bg-[#efe0bb] text-[#5a4420]"
-                  }`}>
-                    {ent.kind}
-                  </span>
+                  <X size={12} />
                 </button>
-              );
-            })}
-          </div>
+              )}
+            </div>
+
+            {visible.length === 0 ? (
+              <p className="text-xs" style={{ fontFamily: FONT_UI, color: "#8a7f63" }}>
+                Nothing in this category matches “{query}”.
+              </p>
+            ) : (
+              <>
+                <div className="flex flex-wrap gap-2.5">
+                  {visible.slice(0, shown).map((ent) => {
+                    const isSelected = ent.id === activeId;
+                    return (
+                      <button
+                        key={ent.id}
+                        onClick={() => setSelectedId(ent.id)}
+                        className={`daic-chip px-3.5 py-2 rounded-full border text-xs flex items-center gap-2 max-w-full transition-all duration-200 ${
+                          isSelected
+                            ? "bg-[#1c2c4d] text-[#f4ead0] border-[#b3862c] shadow-md ring-2 ring-[#b3862c]/50"
+                            : "bg-[#faf4e4] border-[#c9b98c] text-[#5a4420] hover:border-[#b3862c]"
+                        }`}
+                        style={{ fontFamily: FONT_UI }}
+                        aria-pressed={isSelected}
+                      >
+                        <span className={isSelected ? "text-[#d9ac4f]" : "text-[#b3862c]"} aria-hidden="true">
+                          {KIND_ICONS[ent.kind] || <Sparkles size={12} />}
+                        </span>
+                        {/* A section title from a volume can be long; it
+                            truncates on the chip and is shown in full in the
+                            panel below. */}
+                        <span className="font-medium truncate max-w-[15rem]">{ent.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {visible.length > shown && (
+                  <button
+                    onClick={() => setShown((n) => n + PAGE * 2)}
+                    className="daic-btn mt-4 text-xs px-3 py-1.5 rounded-full border"
+                    style={{ borderColor: "#c9b98c", color: "#5a4420", fontFamily: FONT_UI, fontWeight: 600 }}
+                  >
+                    Show more ({visible.length - shown} remaining)
+                  </button>
+                )}
+              </>
+            )}
+          </>
         </AsyncState>
       </div>
 
@@ -179,7 +317,7 @@ export default function KnowledgeMap({ t, openArticle }) {
                             {rel.kind}
                           </span>
                           <span className="text-[#1c2c4d] font-semibold inline-flex items-center gap-1 group-hover:underline">
-                            Explore node <ChevronRight size={12} className="daic-arrow" aria-hidden="true" />
+                            View connections <ChevronRight size={12} className="daic-arrow" aria-hidden="true" />
                           </span>
                         </div>
                       </button>

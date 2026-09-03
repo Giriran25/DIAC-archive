@@ -176,6 +176,18 @@ export default function AudioPlayer({ mediaItem, t }) {
       </div>
 
       {/* Synchronized Transcripts Section */}
+      {/* No transcript is held for this recording. The section is not simply
+          omitted: an absent transcript is a fact about the archive, and
+          inventing timings and speaker names to fill the space would be
+          putting words in a historical figure's mouth. */}
+      {(!mediaItem.segments || mediaItem.segments.length === 0) && (
+        <div className="p-5 md:p-6 bg-[#faf4e4] border-t border-[#d8c79a]">
+          <p className="text-xs" style={{ fontFamily: FONT_UI, color: "#8a7f63" }}>
+            Transcript unavailable for this recording.
+          </p>
+        </div>
+      )}
+
       {mediaItem.segments && mediaItem.segments.length > 0 && (
         <div className="p-5 md:p-6 bg-[#faf4e4]">
           <div className="flex items-center justify-between mb-4 pb-2 border-b border-[#d8c79a]">

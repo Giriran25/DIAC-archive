@@ -38,7 +38,7 @@ export default function ArchivistView({ t }) {
   ];
 
   return (
-    <main id="main-content" className="max-w-5xl mx-auto px-6 pb-20">
+    <main id="main-content" className="max-w-5xl mx-auto px-4 sm:px-6 pb-20">
       {/* Header + logout */}
       <div className="pt-12 pb-6">
         <div className="flex items-center justify-between mb-6 flex-wrap gap-3">

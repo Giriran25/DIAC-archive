@@ -136,17 +136,49 @@ class Reranker:
         return [float(x) for x in raw]
 
     def rerank(self, query: str, candidates: list, texts: dict[int, str],
-               *, top_k: int | None = None) -> list[RerankedHit]:
+               *, top_k: int | None = None,
+               second_chance_floor: float | None = None) -> list[RerankedHit]:
         """Score fused candidates and return the best `top_k`.
 
         `candidates` are FusedHit objects; `texts` maps chunk_id -> text.
+
+        Two query forms, because neither one wins
+        -----------------------------------------
+        Stripping the conversational wrapper helps some questions badly and
+        hurts others just as badly. Measured on this archive:
+
+            "...about the riddle of Rama and Krishna?"  raw 1.50  stripped 2.59
+            "...about labour rights?"                   raw 4.52  stripped 1.42
+            "...about the rights of workers?"           raw 4.77  stripped -0.27
+
+        Scoring only the stripped form therefore refused questions the
+        archive can answer, and scoring only the raw form refuses others.
+        Neither is "the" query; both are the same information need worded
+        differently, and a phrasing artefact must not decide whether the
+        archive answers.
+
+        So when the best score falls short of the gate, the other form gets
+        a hearing and each passage keeps its better score. The floor is NOT
+        lowered - a passage still has to clear it, just not be disqualified
+        for how the question happened to be typed.
+
+        The second pass runs only on queries that would otherwise be
+        refused, so the common path still costs one forward pass per
+        candidate.
         """
         top_k = config.EVIDENCE_K if top_k is None else top_k
         if not candidates:
             return []
 
         passages = [texts.get(c.chunk_id, "") for c in candidates]
-        scores = self.score(query_for_scoring(query), passages)
+        primary = query_for_scoring(query)
+        scores = self.score(primary, passages)
+
+        alternate = (query or "").strip()
+        if (second_chance_floor is not None and scores
+                and max(scores) < second_chance_floor
+                and alternate and alternate != primary):
+            scores = [max(a, b) for a, b in zip(scores, self.score(alternate, passages))]
 
         scored = [
             RerankedHit(

@@ -11,9 +11,12 @@ import {
 
 export default function VideoPlayer({ mediaItem, t }) {
   const [activeSegment, setActiveSegment] = useState(0);
+  const [failed, setFailed] = useState(false);
   const videoRef = useRef(null);
 
   if (!mediaItem) return null;
+
+  const playable = Boolean(mediaItem.servable && mediaItem.streamUrl) && !failed;
 
   return (
     <div className="daic-reveal rounded-xl border border-[#d8c79a] bg-[#faf4e4] overflow-hidden">
@@ -39,15 +42,30 @@ export default function VideoPlayer({ mediaItem, t }) {
 
       {/* Video Display / Player Area */}
       <div className="bg-[#141c30] p-4 flex items-center justify-center">
-        {mediaItem.servable && mediaItem.streamUrl ? (
+        {playable ? (
           <div className="w-full max-w-2xl rounded-lg overflow-hidden border border-[#d8c79a]/30 shadow-lg">
+            {/* preload="metadata" fetches the header and nothing else, so
+                opening this page costs a few kilobytes rather than pulling
+                the file down before anyone presses play. The archive is
+                reached over the demonstration Wi-Fi and shares it with
+                retrieval, which must stay responsive.
+
+                No `type` is declared: the stream endpoint sends the real
+                Content-Type from the file itself, and hardcoding video/mp4
+                here mislabelled the Ogg Theora asset as MP4.
+
+                No poster either - the one named here did not exist and 404ed
+                on every video the page opened. */}
             <video
+              key={mediaItem.id}
               ref={videoRef}
+              src={mediaItem.streamUrl}
               controls
-              className="w-full max-h-[380px] bg-black object-cover"
-              poster="/hero.png"
+              preload="metadata"
+              playsInline
+              onError={() => setFailed(true)}
+              className="w-full max-h-[380px] bg-black"
             >
-              <source src={mediaItem.streamUrl} type="video/mp4" />
               Your browser does not support HTML5 video.
             </video>
           </div>
@@ -63,8 +81,10 @@ export default function VideoPlayer({ mediaItem, t }) {
             {/* The reason is the archive’s own. The previous copy invented a
                 restoration programme that may not exist for this asset. */}
             <p className="text-xs text-[#b8a98c] max-w-sm mx-auto mb-4" style={{ fontFamily: FONT_UI }}>
-              {mediaItem.unservableReason
-                || "This recording is catalogued but no playable file is held by the archive."}
+              {failed
+                ? "This recording could not be played on this device."
+                : mediaItem.unservableReason
+                  || "This recording is catalogued but no playable file is held by the archive."}
             </p>
             <div className="inline-flex items-center gap-1.5 text-[10px] font-mono px-3 py-1 rounded bg-[#352a1a] text-[#d9ac4f] border border-[#c99a3f]/40">
               <AlertOctagon size={11} /> {mediaItem.id}
@@ -78,6 +98,16 @@ export default function VideoPlayer({ mediaItem, t }) {
         <p className="text-sm md:text-base text-[#4a4330] mb-4" style={{ fontFamily: FONT_BODY }}>
           {mediaItem.description}
         </p>
+
+        {/* The archive holds no transcript for this recording. Saying so is
+            the whole point: a silently missing section reads as an oversight,
+            and inventing timings and speaker names to fill it would put words
+            in a historical figure's mouth. */}
+        {(!mediaItem.segments || mediaItem.segments.length === 0) && (
+          <p className="mt-4 pt-4 border-t border-[#d8c79a] text-xs" style={{ fontFamily: FONT_UI, color: "#8a7f63" }}>
+            Transcript unavailable for this recording.
+          </p>
+        )}
 
         {mediaItem.segments && mediaItem.segments.length > 0 && (
           <div className="space-y-2 mt-4 pt-4 border-t border-[#d8c79a]">

@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback } from "react";
 import { ChevronRight, MapPin, Tag, Quote } from "lucide-react";
 import ListenControls from "../components/ui/ListenControls.jsx";
 import AsyncState from "../components/ui/AsyncState.jsx";
-import { splitSentences } from "../lib/retrieval.js";
+import { splitSentences } from "../lib/sentences.js";
 import { api } from "../lib/api/endpoints.js";
 import { useArchive } from "../lib/api/useArchive.js";
 import { eventHeading } from "../lib/text.js";

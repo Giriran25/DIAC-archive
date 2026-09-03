@@ -28,7 +28,7 @@ export default function ArchivistLoginView({ t, onBack }) {
   return (
     <main
       id="main-content"
-      className="min-h-[80vh] flex items-center justify-center px-6 py-12"
+      className="min-h-[80vh] flex items-center justify-center px-4 sm:px-6 py-12"
       style={{ backgroundColor: INDIGO }}
     >
       <div className="w-full max-w-sm">

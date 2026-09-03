@@ -52,7 +52,7 @@ export default function HomeView({ _lang, t, onAsk, setTab, openArticle }) {
   ];
 
   return (
-    <main id="main-content" className="max-w-5xl mx-auto px-6 pb-24">
+    <main id="main-content" className="max-w-5xl mx-auto px-4 sm:px-6 pb-24">
       {/* Hero section */}
       <div className="pt-16 pb-14 text-center daic-reveal">
         <div className="flex justify-center mb-6 opacity-90"><ChakraMark size={40} /></div>
