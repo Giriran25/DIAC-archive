@@ -33,20 +33,24 @@ describe("Phase 2 — Interactive Timeline", () => {
 });
 
 describe("Phase 2 — Memorial Storytelling", () => {
-  it("tells an episode only through passages the archive holds", async () => {
+  it("shows every episode a real source, and never invented text", async () => {
     const user = userEvent.setup();
     mount();
 
     await user.click(screen.getAllByRole("button", { name: /^Stories$/i })[0]);
     expect(await screen.findByRole("heading", { name: /Oral Histories & Landmark Narratives/i })).toBeInTheDocument();
 
-    // Every quotation on this screen is a stored passage attributed to the
-    // document it came from — never an authored pull-quote.
-    const tabs = await screen.findAllByRole("tab", { name: /Passage \d+/i });
-    expect(tabs.length).toBeGreaterThan(0);
-
-    await user.click(tabs[tabs.length - 1]);
-    expect(await screen.findByRole("button", { name: /Open this document/i })).toBeInTheDocument();
+    /* An episode is evidenced one of exactly two ways: by passages the
+       archive stores, or by the album plate its caption was read from.
+       Nothing is written by the interface, so one of these must be present. */
+    const tabs = screen.queryAllByRole("tab", { name: /Passage \d+/i });
+    if (tabs.length > 0) {
+      await user.click(tabs[tabs.length - 1]);
+      expect(await screen.findByRole("button", { name: /Open this document/i })).toBeInTheDocument();
+    } else {
+      expect(await screen.findAllByText(/Archival plate/i)).not.toHaveLength(0);
+      expect(screen.getByText(/transcribed from this plate/i)).toBeInTheDocument();
+    }
   });
 });
 

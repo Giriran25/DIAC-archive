@@ -3,6 +3,7 @@ import {
   Quote, ChevronRight, MapPin, Calendar, ArrowLeft, ShieldCheck,
 } from "lucide-react";
 import AsyncState from "../components/ui/AsyncState.jsx";
+import PlateProvenance from "../components/evidence/PlateProvenance.jsx";
 import { api } from "../lib/api/endpoints.js";
 import { useArchive } from "../lib/api/useArchive.js";
 import { eventHeading, shorten } from "../lib/text.js";
@@ -34,8 +35,11 @@ export default function StoriesView({ t, openArticle }) {
   const listFetcher = useCallback((signal) => api.timeline(undefined, { signal }), []);
   const { data, loading, error, retry } = useArchive(listFetcher, []);
 
-  /* An episode worth telling is one the archive can actually evidence. */
-  const stories = (data?.events ?? []).filter((e) => (e.sourceCount ?? 0) > 0);
+  /* Every dated event is an episode. This used to require a linked passage,
+     but those links were year-substring matches and have been removed as
+     fabricated provenance; the plate each caption was read from is the real
+     source, and it is shown beneath the episode. */
+  const stories = data?.events ?? [];
   const currentId = selectedId ?? stories[0]?.id ?? null;
 
   const detailFetcher = useCallback(
@@ -133,7 +137,9 @@ export default function StoriesView({ t, openArticle }) {
                     style={{ ...meta, color: isSelected ? "#b8c6e0" : undefined }}
                   >
                     <span className="truncate">
-                      {s.sourceCount} sourced passage{s.sourceCount === 1 ? "" : "s"}
+                      {s.sourceCount > 0
+                        ? `${s.sourceCount} sourced passage${s.sourceCount === 1 ? "" : "s"}`
+                        : "Archival plate"}
                     </span>
                     <span className="font-semibold inline-flex items-center gap-1 shrink-0">
                       Read story <ChevronRight size={12} className="daic-arrow" aria-hidden="true" />
@@ -287,10 +293,7 @@ export default function StoriesView({ t, openArticle }) {
                     </div>
                   ) : (
                     <div className="p-7 md:p-10">
-                      <p className="text-sm" style={{ fontFamily: FONT_UI, color: "#8a7f63" }}>
-                        No archival passage has been linked to this episode yet, so
-                        there is nothing here that could be quoted.
-                      </p>
+                      <PlateProvenance event={story} />
                     </div>
                   )}
                 </>

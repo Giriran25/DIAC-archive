@@ -360,7 +360,9 @@ export async function handleRequest(method, path, { params, body } = {}) {
       location: item.location ?? null,
       summary: item.detail,
       detail: item.detail,
-      image: null,
+      /* The backend records the album plate a caption was read from; the
+         demo layer mirrors that so both paths render the same provenance. */
+      image: `/api/manuscript/daic-album-01/page/${19 + idx}/image`,
       seq: idx,
     };
   }

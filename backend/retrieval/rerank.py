@@ -92,6 +92,13 @@ def query_for_scoring(question: str) -> str:
     reduced = re.sub(r"^(?:about|regarding|concerning|on)\s+", "", reduced,
                      flags=re.IGNORECASE).strip()
 
+    # And the determiner those leave behind. Measured on this archive:
+    # "the Mahad Satyagraha" scores 2.490 and is refused, while
+    # "Mahad Satyagraha" scores 2.630 and is answered - the same question,
+    # decided by a word that carries no retrieval signal at all. Stripping
+    # it makes the query cleaner; it does not lower the floor.
+    reduced = re.sub(r"^(?:the|a|an)\s+", "", reduced, flags=re.IGNORECASE).strip()
+
     # Two content words is the floor; below that the original is safer.
     if len(reduced.split()) < 2 or len(reduced) < 8:
         return original

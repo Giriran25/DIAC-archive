@@ -193,11 +193,14 @@ def test_every_provider_declares_an_evidence_budget():
 # ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize("question,expected", [
+    # The leading determiner goes too. It carries no retrieval signal and it
+    # decided real outcomes: "the Mahad Satyagraha" scores 2.490 against this
+    # archive and is refused, "Mahad Satyagraha" scores 2.630 and is answered.
     ("What did Ambedkar write about the riddle of Rama and Krishna?",
-     "the riddle of Rama and Krishna"),
+     "riddle of Rama and Krishna"),
     ("What did Ambedkar say about caste as a division of labourers?",
      "caste as a division of labourers"),
-    ("Tell me about the Mahad Satyagraha", "the Mahad Satyagraha"),
+    ("Tell me about the Mahad Satyagraha", "Mahad Satyagraha"),
 ])
 def test_conversational_framing_is_stripped_for_scoring(question, expected):
     assert query_for_scoring(question) == expected

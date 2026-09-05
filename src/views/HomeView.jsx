@@ -4,6 +4,7 @@ import {
   MessageCircle, ScrollText, Clock, Film, Heart, Network
 } from "lucide-react";
 import ChakraMark from "../components/ChakraMark.jsx";
+import ArchiveJourney from "../components/ArchiveJourney.jsx";
 import TypeIcon from "../components/ui/TypeIcon.jsx";
 import { api } from "../lib/api/endpoints.js";
 import { useArchive } from "../lib/api/useArchive.js";
@@ -158,6 +159,11 @@ export default function HomeView({ _lang, t, onAsk, setTab, openArticle }) {
           </div>
         ))}
       </div>
+
+      {/* How the archive is used, before the list of where things are:
+          the journey answers "how do I get from a question to a page",
+          which the feature grid below cannot. */}
+      <ArchiveJourney setTab={setTab} />
 
       {/* Feature discovery */}
       <section className="mb-16">

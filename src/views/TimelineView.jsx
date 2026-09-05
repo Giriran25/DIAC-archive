@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback } from "react";
 import { ChevronRight, MapPin, Tag, Quote } from "lucide-react";
 import ListenControls from "../components/ui/ListenControls.jsx";
 import AsyncState from "../components/ui/AsyncState.jsx";
+import PlateProvenance from "../components/evidence/PlateProvenance.jsx";
 import { splitSentences } from "../lib/sentences.js";
 import { api } from "../lib/api/endpoints.js";
 import { useArchive } from "../lib/api/useArchive.js";
@@ -188,9 +189,9 @@ export default function TimelineView({ t, reader, lang, openArticle }) {
                       </div>
                     </div>
                   ) : (
-                    <p className="pt-5 border-t border-[#d8c79a]" style={provenance}>
-                      No archival passage has been linked to this event yet.
-                    </p>
+                    /* Not "no source" — the plate IS the source, and it can
+                       be opened and compared with the caption. */
+                    <PlateProvenance event={entry} />
                   )}
                 </>
               )}

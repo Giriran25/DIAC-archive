@@ -441,17 +441,28 @@ def build_entities(conn) -> int:
             [(entity_id, m["id"]) for m in matches])
         created += 1
 
-    # Link timeline events to the passages that mention their year.
+    # Timeline events are NOT linked to passages here.
+    #
+    # This used to run:
+    #
+    #     SELECT id FROM chunks WHERE chunk_kind='body'
+    #      AND text LIKE '%<sort_year>%' LIMIT 3
+    #
+    # which is "any three passages anywhere in the corpus containing this
+    # year as a substring". It produced citations that were simply false:
+    # the 1908 plate of Ambedkar's name in the Elphinstone College roll-call
+    # was given three sources about plough cattle and agricultural stock,
+    # because those passages happen to contain "1908-09". The interface then
+    # displayed them under "Archival sources" with volume and page.
+    #
+    # A shared year is not evidence of anything. An event's real provenance
+    # is the album plate it was scanned from, which is already recorded in
+    # timeline_events.image_path and needs no link table.
+    #
+    # timeline_sources remains for genuine links - a curated one exists for
+    # the birth event, added by backend/ingest/repair_timeline.py, whose
+    # source actually states the date it is cited for.
     linked = 0
-    for event in conn.execute("SELECT id, sort_year FROM timeline_events").fetchall():
-        for chunk in conn.execute(
-            "SELECT id FROM chunks WHERE chunk_kind='body' AND text LIKE ? LIMIT 3",
-            (f"%{event['sort_year']}%",)
-        ).fetchall():
-            conn.execute(
-                "INSERT OR IGNORE INTO timeline_sources (event_id, chunk_id, note) "
-                "VALUES (?,?,'passage mentions this year')", (event["id"], chunk["id"]))
-            linked += 1
 
     print(f"  entities: {created} created, {linked} timeline source links")
     return created
