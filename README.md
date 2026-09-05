@@ -180,7 +180,16 @@ Developed by Team CortexEdge:
 
 ## License
 
-This project is licensed under the MIT License. See [LICENSE](LICENSE).
+This project is proprietary to Team CortexEdge.
+
+The repository contains an internal hackathon prototype developed for
+Smart India Hackathon (SIH) 2026.
+
+Use and modification are restricted to the members of Team CortexEdge.
+No public redistribution, commercial use, or third-party reuse is
+permitted without prior written permission from the copyright holders.
+
+See the `LICENSE` file for the full terms.
 
 Currently, two official plugins are available:
 
